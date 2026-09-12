@@ -79,7 +79,15 @@ export class Dragon {
 
   _mat(textures) {
     const look = this.spec.look;
-    const scales = setRepeat(textures.pack(look.pack, { clone: true }), ...look.scaleRepeat);
+    // The repeat counts are authored in UV space, so a uniform root scale would
+    // hand the Basalt Tyrant scales four times the size of an Emberkin's. Tie
+    // the tiling to body size instead and the plates stay roughly hand-sized.
+    const density = THREE.MathUtils.clamp(this.spec.build.scale / 6, 0.85, 2.2);
+    const scales = setRepeat(
+      textures.pack(look.pack, { clone: true }),
+      look.scaleRepeat[0] * density,
+      look.scaleRepeat[1] * density
+    );
     const body = standardFrom(scales, {
       metalness: look.metalness,
       roughness: look.roughness,
@@ -88,6 +96,24 @@ export class Dragon {
       normalScale: new THREE.Vector2(1.7, 1.7),
       envMapIntensity: 0.5,
     });
+    body.onBeforeCompile = (shader) => {
+      shader.vertexShader = `varying vec3 vHide;\n${shader.vertexShader}`.replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+         vHide = position;`
+      );
+      // The scale packs outline every single plate in molten grout. Left at
+      // full strength that net out-radiates the hide and the beast reads as a
+      // glowing wireframe, so pool the heat into bands and along the belly.
+      shader.fragmentShader = `varying vec3 vHide;\n${shader.fragmentShader}`.replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+         float band = 0.5 + 0.5 * sin(vHide.x * 1.9 - 0.6);
+         float belly = smoothstep(0.7, -0.5, vHide.y);
+         float heat = clamp(band * 0.7 + belly * 0.5, 0.0, 1.0);
+         totalEmissiveRadiance *= heat * heat;`
+      );
+    };
 
     const wingPack = setRepeat(textures.pack("dragon_wing", { clone: true }), 0.55, 0.55);
     const wing = standardFrom(wingPack, {
