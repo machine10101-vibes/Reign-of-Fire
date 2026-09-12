@@ -5,6 +5,7 @@ import { SPECIES, SPECIES_ORDER, LAZY_PACKS } from "./species.js";
 import { World } from "./World.js";
 import { Player } from "./Player.js";
 import { Weapon } from "./Weapon.js";
+import { Viewmodel } from "./Viewmodel.js";
 import { Hunt } from "./Hunt.js";
 import { Particles } from "./Particles.js";
 import { Combat } from "./Combat.js";
@@ -57,12 +58,13 @@ export class Game {
     this.player.yaw = 0.04;
     this.player.pitch = -0.18;
     this.player.bind(this.canvas);
-    this.weapon = new Weapon(this.camera, textures);
+    this.viewmodel = new Viewmodel(this.camera, innerWidth / innerHeight, this.world.envMap);
+    this.weapon = new Weapon(this.viewmodel, textures);
 
     this.particles = new Particles(this.scene);
     this.hunt = new Hunt(this.scene, this.world, textures, this.audio);
     this.combat = new Combat(this.scene, this.world, this.hunt, this.particles, this.audio);
-    this.fx = new PostFX(this.renderer, this.scene, this.camera);
+    this.fx = new PostFX(this.renderer, this.scene, this.camera, this.viewmodel);
     this.demo = new DemoDirector(this.player, this.weapon);
 
     this._applyQuality(this.perf.tier);
@@ -92,6 +94,7 @@ export class Game {
     const h = innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.viewmodel.resize(w / h);
     this.renderer.setSize(w, h);
     this.fx.resize(w, h);
   }
@@ -149,7 +152,14 @@ export class Game {
     }
 
     const hot = this._aimingDragon();
-    this.weapon.update(dt, moving, hot);
+    this.viewmodel.syncLighting(this.world.sun, this.world.hemi, this.camera.quaternion);
+    this.weapon.update(dt, {
+      moving,
+      sprinting: this.player.sprint,
+      crouching: this.player.crouch,
+      turnRate: this.player.turnRate,
+      aimingHot: hot,
+    });
     if (this.player.consumeReload()) this.weapon.tryReload();
     if (this.player.fireHeld && this.weapon.tryFire()) {
       this.camera.getWorldDirection(this._dir);
@@ -157,6 +167,7 @@ export class Game {
       this.combat.fire(this._muzzle, this._dir);
       this.player.addShake(0.045);
       this.audio.fire();
+      this.particles.muzzleFlash(this._muzzle, this._dir);
     }
 
     const focus = this.hunt.focus(this.player.position);
@@ -194,7 +205,12 @@ export class Game {
       hot,
       hit: this.combat.lastHit > 0,
       hitPart: this.combat.lastHitPart,
+      // Normalised against a clean unarmoured hit, so a glance off a Basalt
+      // Tyrant's plate reads differently from one through a wing.
+      hitWeight: THREE.MathUtils.clamp((this.combat.lastHitDealt ?? 0) / CONFIG.weapon.damage, 0, 1),
       heat: this.player.onFire > 0,
+      reloading: this.weapon.reloading,
+      reloadProgress: this.weapon.reloadProgress,
     });
     this.hunt.logDirty = false;
   }

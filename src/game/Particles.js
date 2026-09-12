@@ -138,6 +138,20 @@ export class Particles {
     else this._emit(this.fire, origin, this.tmp, 260, dt, 18, 6 * spread);
   }
 
+  /**
+   * The blast out of the muzzle: a short cone of sparks with a puff of smoke
+   * behind it. The weapon used to fire with nothing at all leaving the barrel,
+   * which made a shot read as the bolt simply appearing in mid air.
+   */
+  muzzleFlash(origin, direction) {
+    this.burst(this.spark, origin, direction, 26, 16, 7);
+    this.burst(this.fire, origin, direction, 8, 9, 3.5);
+    // Deliberately not the ambient ash pool: its particles live for the best
+    // part of a minute, so a burst into it has no free slots to claim and the
+    // ones it does claim get dragged back into the drifting field.
+    this.burst(this.chips, origin, direction, 9, 6, 4);
+  }
+
   bloodHit(origin, normal) {
     this.burst(this.blood, origin, normal, 22, 6, 5);
     this.burst(this.chips, origin, normal, 14, 5, 4);
