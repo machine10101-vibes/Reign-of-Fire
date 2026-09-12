@@ -1,9 +1,8 @@
 import { defineConfig } from "vite";
 
-const pages = process.env.GITHUB_PAGES === "1";
-
-export default defineConfig({
-  base: pages ? "/Reign-of-Fire/" : "/",
+export default defineConfig(({ command }) => ({
+  // Relative base so the build works on GitHub Pages, gh-pages, and CDNs.
+  base: command === "build" ? "./" : "/",
   server: {
     host: "0.0.0.0",
     port: 5173,
@@ -17,4 +16,4 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
   },
-});
+}));

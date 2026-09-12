@@ -4,10 +4,16 @@ First-person dragon hunt on Caldera Ridge. WebGL vertical slice targeting Unreal
 
 ## Play live
 
-**Hunt:** https://machine10101-vibes.github.io/Reign-of-Fire/  
+**Hunt (GitHub Pages):** https://machine10101-vibes.github.io/Reign-of-Fire/  
 **Cinematic autoplay:** https://machine10101-vibes.github.io/Reign-of-Fire/?autoplay=1
 
-GitHub Pages deploys from `main` via `.github/workflows/deploy-pages.yml`.
+A production build is published to the `gh-pages` branch on every push to `main`.
+
+If that GitHub Pages URL 404s, enable it once (admin): **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch `gh-pages` / `/` (root) → Save**.
+
+Until Pages is enabled, the same build is playable from the branch:
+
+https://cdn.jsdelivr.net/gh/machine10101-vibes/Reign-of-Fire@gh-pages/index.html
 
 ## Play locally
 
