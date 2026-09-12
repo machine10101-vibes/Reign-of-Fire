@@ -182,6 +182,8 @@ export class DragonAI {
     this.state = state;
     this.phaseT = 0;
     this.stateLabel = state;
+    // Backing off earns the right to press again next time in.
+    if (state !== DragonState.ATTACK) this._pressed = false;
   }
 
   _move(dt) {
@@ -636,10 +638,33 @@ export class DragonAI {
   }
 
   _endAttack() {
+    const last = this.attackStyle;
     this.attackStyle = null;
     this.phase = "windup";
-    this._enter(this._shouldFlee() ? DragonState.FLEE : DragonState.RECOVER);
-    if (this.state === DragonState.FLEE) this.hint = this.spec.lines.flee;
+    if (this._shouldFlee()) {
+      this._enter(DragonState.FLEE);
+      this.hint = this.spec.lines.flee;
+      return;
+    }
+    // A beast that finishes its pass still on top of the hunter, and still has
+    // its blood up, presses the attack rather than climbing back out to its
+    // standoff first. That matters for more than pressure: recovery withdraws
+    // to nearly twice the attack range, so every style choice was being made
+    // from a long way out and the short-range half of every repertoire — tail
+    // sweeps above all — was structurally unreachable.
+    // One follow-up per engagement, though. A beast allowed to chain them
+    // never gives the hunter the beat between passes that every one of these
+    // tells is written for, and a pack of Rustwings at borrowed aggression
+    // would chain them indefinitely.
+    const dist = this._playerPos ? this.position.distanceTo(this._playerPos) : Infinity;
+    if (dist < 34 && !this._pressed && Math.random() < this.aggressionNow - 0.2) {
+      this._pressed = true;
+      this.attackStyle = last;
+      this._chooseAttack({ playerPos: this._playerPos });
+      this._enter(DragonState.ATTACK);
+      return;
+    }
+    this._enter(DragonState.RECOVER);
   }
 
   // ----------------------------------------------------------- personality
@@ -665,23 +690,57 @@ export class DragonAI {
     return true;
   }
 
+  /**
+   * Picks an attack out of the species' repertoire.
+   *
+   * Disciplined species used to take the first viable style in list order, and
+   * because a species writes its signature attack first, that meant almost
+   * every beast on the ridge had exactly one attack: an Ashwrought dive-fired
+   * twenty-two times out of twenty-two and never once used its tail, and a
+   * Basalt Tyrant never did anything but lob mortars.
+   *
+   * Styles are now scored on three things. How well the current range suits the
+   * style, so a tail sweep comes out when the beast is on top of the hunter and
+   * a mortar when it is holding off. How often the species lists the style —
+   * duplicate entries in the spec are how a signature attack is weighted, and
+   * that intent is preserved. And against repeating whatever it just did, so a
+   * long fight shows the whole repertoire. Erratic species throw the score away
+   * and roll blind, which is what makes them erratic.
+   */
   _chooseAttack(ctx) {
     const dist = this.position.distanceTo(ctx.playerPos);
     const pool = this.mind.attacks;
-    const viable = pool.filter((style) => {
+    const listed = new Map();
+    for (const style of pool) listed.set(style, (listed.get(style) ?? 0) + 1);
+
+    const viable = [];
+    let pick = null;
+    let best = -Infinity;
+    for (const [style, count] of listed) {
       const meta = STYLE[style];
-      if (!meta) return false;
-      if (dist < meta.band[0]) return false;
-      if (dist > meta.band[1]) return meta.closer === true;
-      return true;
-    });
-    const candidates = viable.length ? viable : pool.filter((s) => STYLE[s]?.closer);
-    const list = candidates.length ? candidates : pool;
-    // Erratic species roll blind; disciplined ones favour the nearest-band pick.
-    const pick =
-      Math.random() < this.mind.erratic
-        ? list[Math.floor(Math.random() * list.length)]
-        : list[0];
+      if (!meta) continue;
+      const [near, far] = meta.band;
+      // Past its far edge, only the styles that close the distance themselves
+      // stay on the table — the rest simply cannot reach.
+      if (dist < near || (dist > far && !meta.closer)) continue;
+      viable.push(style);
+      const half = Math.max(1, (far - near) / 2);
+      const fit = Math.max(0, 1 - Math.abs(dist - (near + far) / 2) / half);
+      const score =
+        fit +
+        count * 0.35 +
+        (meta.closer ? this.aggressionNow * 0.3 : 0) -
+        (style === this.attackStyle ? 0.45 : 0);
+      if (score > best) {
+        best = score;
+        pick = style;
+      }
+    }
+
+    const list = viable.length ? viable : pool;
+    if (!pick || Math.random() < this.mind.erratic) {
+      pick = list[Math.floor(Math.random() * list.length)];
+    }
     this.attackStyle = pick;
     this.phase = "windup";
     this._shots = 0;

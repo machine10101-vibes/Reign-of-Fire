@@ -59,6 +59,7 @@ function run(ids) {
   let distSum = 0;
   let frames = 0;
   let lastStyle = null;
+  const styles = new Map();
 
   for (let t = 0; t < SECONDS; t += STEP) {
     hunt._clearT = 0;
@@ -69,7 +70,10 @@ function run(ids) {
     damage += Math.max(0, before - player.health);
 
     time[e.ai.state] = (time[e.ai.state] ?? 0) + STEP;
-    if (e.ai.attackStyle && e.ai.attackStyle !== lastStyle) commits++;
+    if (e.ai.attackStyle && e.ai.attackStyle !== lastStyle) {
+      commits++;
+      styles.set(e.ai.attackStyle, (styles.get(e.ai.attackStyle) ?? 0) + 1);
+    }
     lastStyle = e.ai.attackStyle;
     if (e.ai.breath.active) breathT += STEP;
     for (const x of hunt.entries) peak = Math.max(peak, x.ai.aggressionNow);
@@ -89,6 +93,12 @@ function run(ids) {
     engaged: +((SECONDS - (time.patrol ?? 0)) / SECONDS).toFixed(2),
     closest: Math.round(closest),
     meanDist: Math.round(distSum / frames),
+    // Which of its repertoire it actually reached for, commonest first.
+    repertoire:
+      [...styles.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([style, n]) => `${style.replace(/_/g, "-")}:${n}`)
+        .join(" ") || "-",
   };
 }
 
@@ -98,3 +108,5 @@ for (const id of SPECIES_ORDER.filter((s) => SPECIES[s].mind.packMinded)) rows.p
 const cols = ["id", "aggression", "peakAggr", "engaged", "commits", "breath", "damage", "closest", "meanDist"];
 console.log(cols.map((c) => c.padEnd(15)).join(""));
 for (const r of rows) console.log(cols.map((c) => String(r[c]).padEnd(15)).join(""));
+console.log();
+for (const r of rows) console.log(`${r.id.padEnd(15)}${r.repertoire}`);

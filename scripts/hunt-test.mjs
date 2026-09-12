@@ -155,10 +155,13 @@ const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 // Every species has to commit to an attack and reach the hunter, on every seed
 // rather than on a lucky one.
+const repertoire = new Map();
 for (const id of SPECIES_ORDER) {
   const spec = SPECIES[id];
+  repertoire.set(id, new Set());
   for (const seed of SEEDS) {
     const { seen, damageToPlayer, breathSeconds, breathAim } = simulate([id], { seconds: 120, seed });
+    for (const style of seen.styles) repertoire.get(id).add(style);
     expect(seen.states.has("attack"), `${id} (seed ${seed}): never committed to an attack in two minutes`);
     expect(
       seen.styles.size > 0 && [...seen.styles].every((s) => spec.mind.attacks.includes(s)),
@@ -180,6 +183,21 @@ for (const id of SPECIES_ORDER) {
       );
     }
   }
+}
+
+// Repertoires must not be decorative. The style picker used to take the first
+// viable entry in list order, and since a species writes its signature attack
+// first, almost every beast on the ridge had exactly one attack. One species is
+// allowed to: the Basalt Tyrant is artillery and never closes to the range its
+// other styles need.
+{
+  const varied = [...repertoire.values()].filter((styles) => styles.size > 1).length;
+  expect(
+    varied >= SPECIES_ORDER.length - 1,
+    `only ${varied} of ${SPECIES_ORDER.length} species reached more than one of their attack ` +
+      `styles across ${SEEDS.length} seeds: ` +
+      [...repertoire].map(([id, s]) => `${id}=${s.size}`).join(" ")
+  );
 }
 
 // Aggression has to show up as behaviour, not just a number in the table.
