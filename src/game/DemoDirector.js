@@ -58,7 +58,8 @@ export class DemoDirector {
     const to = dragonPos.clone().sub(p.position);
     const yaw = Math.atan2(-to.x, -to.z);
     const horiz = Math.max(1, Math.hypot(to.x, to.z));
-    const pitch = THREE.MathUtils.clamp(-Math.atan2(to.y, horiz), -0.72, -0.12);
+    // Positive pitch is up, and the quarry is always above the ridge line.
+    const pitch = THREE.MathUtils.clamp(Math.atan2(to.y, horiz), -0.2, 0.95);
     // Damping raw angles spins the long way round when the target crosses
     // behind the hunter, so turn through the shortest arc instead.
     const delta = ((yaw - p.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
