@@ -63,6 +63,7 @@ export class World {
     this.group = new THREE.Group();
     this.props = [];
     this.lavaMats = [];
+    this.blockers = [];
     scene.add(this.group);
     this._buildSky(textures);
     this._buildTerrain(textures);
@@ -130,13 +131,83 @@ export class World {
     return out;
   }
 
+  /**
+   * Registers a prop the hunter cannot walk through, as an upright cylinder.
+   *
+   * Only things that reach the eye are worth listing. Blocking every stone
+   * underfoot would have the hunter shuffling sideways around gravel, and the
+   * defect this exists to fix is walking *into* a boulder, not tripping on one.
+   */
+  _block(x, z, radius) {
+    this.blockers.push({ x, z, r: radius });
+  }
+
+  /**
+   * Slides a point out of any prop it has ended up inside, horizontally.
+   *
+   * Resolved as a push rather than as a swept collision: at walking pace over a
+   * scatter of convex props the difference is a few centimetres, and it cannot
+   * wedge or tunnel the way a stop-on-contact test can.
+   *
+   * Boulders are scattered without a spacing rule, so they overlap and a push
+   * out of one can land inside its neighbour. The pushes are therefore summed
+   * over a pass and applied together, which sends the hunter out along the
+   * bisector of a pair instead of bouncing between their two faces, and the
+   * pass is repeated until nothing overlaps.
+   */
+  resolveCollision(position, radius = 0.45) {
+    let moved = false;
+    for (let pass = 0; pass < 6; pass++) {
+      let pushX = 0;
+      let pushZ = 0;
+      let hits = 0;
+      let worst = 0;
+      let worstX = 1;
+      let worstZ = 0;
+      for (const b of this.blockers) {
+        const dx = position.x - b.x;
+        const dz = position.z - b.z;
+        const reach = b.r + radius;
+        if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+        const gap = Math.hypot(dx, dz);
+        if (gap >= reach) continue;
+        hits++;
+        const depth = reach - gap;
+        const nx = gap < 1e-4 ? 1 : dx / gap;
+        const nz = gap < 1e-4 ? 0 : dz / gap;
+        pushX += nx * depth;
+        pushZ += nz * depth;
+        if (depth > worst) {
+          worst = depth;
+          worstX = nx * depth;
+          worstZ = nz * depth;
+        }
+      }
+      if (!hits) break;
+      moved = true;
+      // Deep inside a cluster of overlapping boulders the pushes point at each
+      // other and cancel, which would leave the hunter wedged in the middle of
+      // the rock. When the sum collapses like that, leave by the deepest face.
+      if (Math.hypot(pushX, pushZ) < worst * 0.6) {
+        pushX = worstX;
+        pushZ = worstZ;
+      }
+      // A hair past contact, so the next frame's test starts outside.
+      const len = Math.hypot(pushX, pushZ) || 1;
+      position.x += pushX + (pushX / len) * 0.01;
+      position.z += pushZ + (pushZ / len) * 0.01;
+    }
+    return moved;
+  }
+
   _instance(geo, mat, placements, place) {
     const mesh = new THREE.InstancedMesh(geo, mat, placements.length);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     const dummy = new THREE.Object3D();
     placements.forEach((p, i) => {
-      place(dummy, p, i);
+      const block = place(dummy, p, i);
+      if (block > 0) this._block(dummy.position.x, dummy.position.z, block);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
     });
@@ -318,6 +389,11 @@ export class World {
       p.setXYZ(i, p.getX(i) * s, p.getY(i) * s, p.getZ(i) * s);
     }
     geo.computeVertexNormals();
+    // The displaced hull, so the no-go circle can be sized to the lobes rather
+    // than to the mean surface: a boulder's longest spur is what the camera
+    // walks into, and it reaches about half again as far.
+    geo.computeBoundingSphere();
+    const hull = geo.boundingSphere.radius;
 
     const spots = this._scatter(260, { minR: 18, maxR: 134, slopeMax: 2.4, clear: 16 });
     this.rocks = this._instance(geo, mat, spots, (d, p) => {
@@ -325,6 +401,10 @@ export class World {
       d.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.4);
       const s = 0.7 + Math.random() * 3.0;
       d.scale.set(s * (0.7 + Math.random() * 0.6), s * (0.75 + Math.random() * 0.6), s * (0.7 + Math.random() * 0.6));
+      // Knee-high stones pass under the eye line and are better stepped over
+      // than walked around. The rest are blocked at their hull, less the body
+      // radius the resolver adds back, so the stop lands just off the rock.
+      return d.scale.y > 0.9 ? hull * Math.max(d.scale.x, d.scale.z) - 0.45 : 0;
     });
 
     this._buildScree(mat);
@@ -387,6 +467,7 @@ export class World {
       d.rotation.set((Math.random() - 0.5) * 0.22, Math.random() * Math.PI, (Math.random() - 0.5) * 0.22);
       const s = 0.7 + Math.random() * 1.3;
       d.scale.set(s, s * (0.8 + Math.random() * 1.0), s);
+      return s * 1.5;
     });
   }
 
@@ -480,6 +561,7 @@ export class World {
       d.rotation.set((Math.random() - 0.5) * 0.3, Math.random() * Math.PI, (Math.random() - 0.5) * 0.3);
       const s = 0.7 + Math.random() * 0.9;
       d.scale.set(s, s * (0.8 + Math.random() * 0.7), s);
+      return s * 0.55;
     });
   }
 
@@ -527,6 +609,10 @@ export class World {
       d.rotation.set(0, Math.random() * Math.PI * 2, 0);
       const s = 0.95 + Math.random() * 0.95;
       d.scale.setScalar(s);
+      // Only the cranium is solid enough to matter, and it sits well off to one
+      // side of the pile's origin. The ribcage is open arcs: walk through it.
+      const a = d.rotation.y;
+      this._block(p.x + Math.cos(a) * 1.6 * s, p.z - Math.sin(a) * 1.6 * s, 1.05 * s);
     });
   }
 
@@ -561,6 +647,13 @@ export class World {
       d.rotation.set(0, Math.random() * Math.PI * 2, 0);
       const s = 1.1 + Math.random() * 0.8;
       d.scale.setScalar(s);
+      // Blocked column by column along the row rather than as one disc, so the
+      // colonnade can still be walked through where it has fallen open.
+      const a = d.rotation.y;
+      for (let i = 0; i < 7; i++) {
+        const off = (i * 1.5 - 4.5) * s;
+        this._block(p.x + Math.cos(a) * off, p.z - Math.sin(a) * off, 0.7 * s);
+      }
     });
   }
 
@@ -643,6 +736,7 @@ export class World {
     tarp.rotation.y = 0.6;
     tarp.castShadow = true;
     camp.add(tarp);
+    this._block(SPAWN.x - 3.4, SPAWN.y - 2.2, 1.3);
 
     const fire = new THREE.Group();
     fire.position.set(1.6, 0, 1.4);

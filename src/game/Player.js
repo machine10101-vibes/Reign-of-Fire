@@ -112,9 +112,15 @@ export class Player {
     this.position.z += this.velocity.z * dt;
     this.position.y += this.velocity.y * dt;
 
+    // Bounds first: a few boulders straddle the edge of the walkable area, and
+    // clamping afterwards would drag the hunter back inside whichever one the
+    // push had just cleared. There is a good ten metres of terrain past the
+    // limit, so losing the clamp for a frame at the very edge costs nothing.
     const limit = CONFIG.worldSize * 0.46;
     this.position.x = THREE.MathUtils.clamp(this.position.x, -limit, limit);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -limit, limit);
+
+    this.world.resolveCollision(this.position, 0.5);
 
     this.didStep = false;
     const horiz = Math.hypot(this.velocity.x, this.velocity.z);
