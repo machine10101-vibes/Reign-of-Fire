@@ -37,6 +37,9 @@ Cinematic autoplay: `http://localhost:5173/?autoplay=1`
 | Space | Jump |
 
 Standing inside the staked camp ring at the spawn point binds wounds between flights.
+Run out of health and the hunter goes down: the beast that did it is named, and he
+is dragged back to the camp fire with the flight restarted. Bounty already earned
+stands — the flight is the thing you lose.
 
 ## The roster
 
@@ -56,8 +59,14 @@ drives its combat numbers, and `mind` drives its AI.
 | Basalt Tyrant | Walking Siege | 0.55 | 2600 | 55% | Too heavy to dive. Hovers at range lobbing lava mortars; bolts glance off everything but the skull |
 
 Attack styles implemented: dive fire, strafe run, hover barrage, lava mortar,
-ambush lunge, venom spray, tail sweep. A beast picks between the styles it knows
-by range band, favouring its primary unless its `erratic` weight rolls it off.
+ambush lunge, venom spray, tail sweep. A beast scores the styles it knows on how
+well the current range suits them, on how often its spec lists them (duplicate
+entries are how a signature attack is weighted), and against repeating whatever
+it just did, unless its `erratic` weight rolls the score away entirely. A beast
+that finishes a pass still on top of the hunter presses the attack once more
+rather than climbing back out to its standoff, which is what puts the
+short-range half of a repertoire in reach at all.
+
 `patience` sets wind-up and cooldown length, `courage` decides whether a bolt
 interrupts a committed attack, `territorial` decides whether it holds a ring or
 shadows you, and `fleeAt` sets the health fraction it runs at. `packMinded` is

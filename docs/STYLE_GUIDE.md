@@ -85,6 +85,15 @@ reachable even though the torso sphere overlaps it. Armour soaks a flat fraction
 everywhere except the skull, which soaks a quarter as much — the Basalt Tyrant's
 55% armour is the reason its only real weak point is the head.
 
+## Stakes
+
+- The hunter can be killed. Down at zero health, the view drops, the beast that
+  did it is named, and he wakes at the camp fire with the flight restarted.
+  Bounty and kills stand; the flight is the loss. Aggression weights only mean
+  something if there is a fail state for them to threaten
+- The autoplay attract loop mends its own damage and never sees that screen. A
+  showreel that ends on a death overlay is worse than one that cheats
+
 ## Weapon — Ashpiercer Ballista
 
 Concept: `art/concepts/weapon_ballista_concept.png`
