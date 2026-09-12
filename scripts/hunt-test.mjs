@@ -95,6 +95,7 @@ function _simulate(speciesIds, { seconds, shoot, playerHealth }) {
   const seen = { states: new Set(), styles: new Set(), breathKinds: new Set() };
   let mortars = 0;
   let damageToPlayer = 0;
+  let peakAggression = 0;
   let breathSeconds = 0;
   let aimDot = 0;
   const toPlayer = new THREE.Vector3();
@@ -114,6 +115,7 @@ function _simulate(speciesIds, { seconds, shoot, playerHealth }) {
       seen.states.add(e.ai.state);
       if (e.ai.attackStyle) seen.styles.add(e.ai.attackStyle);
       if (e.ai.breath.active) seen.breathKinds.add(e.ai.breath.kind);
+      peakAggression = Math.max(peakAggression, e.ai.aggressionNow);
       // How well the lit flame is actually pointed at the hunter, which is the
       // quantity the damage cone tests and the particles are drawn along.
       if (e.ai.breath.active) {
@@ -143,6 +145,7 @@ function _simulate(speciesIds, { seconds, shoot, playerHealth }) {
     seen,
     mortars,
     damageToPlayer,
+    peakAggression,
     breathSeconds,
     breathAim: breathSeconds > 0 ? aimDot / breathSeconds : 1,
   };
@@ -218,6 +221,44 @@ for (const seed of SEEDS) {
   expect(
     hunt.bounty >= SPECIES.emberkin.bounty,
     `seed ${seed}: a kill did not pay its bounty (${hunt.bounty})`
+  );
+}
+
+// A pack hunter has to be measurably braver with company, and the extra nerve
+// has to come from `packMinded` rather than from there simply being more of
+// them: zeroing the weight must collapse the pack's aggression to the lone
+// figure.
+for (const id of SPECIES_ORDER.filter((s) => SPECIES[s].mind.packMinded)) {
+  const runs = (ids) => SEEDS.map((seed) => simulate(ids, { seconds: 60, playerHealth: 1e9, seed }));
+  const alone = runs([id]);
+  const pack = runs([id, id, id]);
+
+  const weight = SPECIES[id].mind.packMinded;
+  SPECIES[id].mind.packMinded = 0;
+  const unbound = runs([id, id, id]);
+  SPECIES[id].mind.packMinded = weight;
+
+  for (let i = 0; i < SEEDS.length; i++) {
+    expect(
+      pack[i].peakAggression > alone[i].peakAggression + 0.1,
+      `${id} (seed ${SEEDS[i]}): a pack of three peaked at ${pack[i].peakAggression.toFixed(2)} ` +
+        `aggression, barely above a lone beast's ${alone[i].peakAggression.toFixed(2)}`
+    );
+    expect(
+      Math.abs(unbound[i].peakAggression - alone[i].peakAggression) < 0.01,
+      `${id} (seed ${SEEDS[i]}): numbers alone changed its aggression ` +
+        `(${unbound[i].peakAggression.toFixed(2)} vs ${alone[i].peakAggression.toFixed(2)}), so ` +
+        `this is not measuring packMinded`
+    );
+  }
+  // Damage from three beasts swings hard seed to seed, so the pressure claim is
+  // only made about the average.
+  const bolder = mean(pack.map((r) => r.damageToPlayer));
+  const timid = mean(unbound.map((r) => r.damageToPlayer));
+  expect(
+    bolder > timid,
+    `${id}: pack nerve did not translate into pressure on the hunter ` +
+      `(${bolder.toFixed(0)} vs ${timid.toFixed(0)} mean with the weight off)`
   );
 }
 

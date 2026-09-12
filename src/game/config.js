@@ -29,6 +29,7 @@ export const CONFIG = {
       { label: "Scavengers on the slope", species: ["emberkin", "emberkin"] },
       { label: "Forge-hot harrier", species: ["cinderwyrm"] },
       { label: "The ridge's landlord", species: ["ashwrought"] },
+      { label: "They hunt in threes", species: ["rustwing", "rustwing", "rustwing"] },
       { label: "Fumarole brood", species: ["sulfurmaw", "emberkin"] },
       { label: "Something is stalking you", species: ["pale_stalker"] },
       { label: "Walking siege", species: ["basalt_tyrant", "cinderwyrm"] },

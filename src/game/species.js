@@ -275,6 +275,71 @@ export const SPECIES = {
     },
   },
 
+  rustwing: {
+    id: "rustwing",
+    name: "Rustwing",
+    epithet: "Pack Hunter",
+    tier: 2,
+    bounty: 420,
+    codex:
+      "Cold-blooded and never alone. A lone Rustwing keeps its distance and looks almost tame; every packmate that commits to the hunt makes the rest of them braver, and three of them will run you off the ridge. Kill one and the survivors lose their nerve.",
+    build: {
+      scale: 4.6,
+      neck: 1.2,
+      tailSegments: 6,
+      horns: 3,
+      hornLength: 0.4,
+      spikes: true,
+      wingSpan: 1.35,
+      bodyGirth: 0.65,
+      headSize: 0.85,
+    },
+    look: {
+      pack: "scales_kin",
+      scaleRepeat: [2.6, 1.8],
+      emissive: [0.62, 0.2, 0.07],
+      emissiveBase: 0.35,
+      eye: 0xffd9a0,
+      glow: 0x8a5a3a,
+      glowIntensity: 4,
+      metalness: 0.5,
+      roughness: 0.62,
+      wingTint: 0x9aa4ad,
+    },
+    stats: {
+      hp: 380,
+      flySpeed: 34,
+      diveSpeed: 46,
+      turnRate: 5.2,
+      patrolRadius: 44,
+      patrolHeight: 24,
+      spotRange: 160,
+      attackRange: 30,
+      damage: 11,
+      armor: 0.05,
+    },
+    mind: {
+      aggression: 0.35,
+      patience: 0.8,
+      courage: 0.45,
+      erratic: 0.4,
+      territorial: 0.2,
+      fleeAt: 0.3,
+      // Each packmate already in the fight adds this much live aggression.
+      packMinded: 0.2,
+      attacks: [ATTACK.STRAFE_RUN, ATTACK.AMBUSH_LUNGE, ATTACK.TAIL_SWEEP],
+      voice: { roar: 170, breath: 140 },
+    },
+    lines: {
+      idle: "Rustwings circle wide, waiting for each other.",
+      spot: "One Rustwing peels off. The others are watching it.",
+      attack: "The pack commits together — do not let them surround you.",
+      pain: "It screeches, and the whole pack answers.",
+      flee: "Without its pack the Rustwing loses its nerve.",
+      dead: "A Rustwing drops. The rest hesitate.",
+    },
+  },
+
   pale_stalker: {
     id: "pale_stalker",
     name: "Pale Stalker",
@@ -408,6 +473,7 @@ export const SPECIES_ORDER = [
   "emberkin",
   "cinderwyrm",
   "ashwrought",
+  "rustwing",
   "sulfurmaw",
   "pale_stalker",
   "basalt_tyrant",
@@ -420,6 +486,7 @@ export const LAZY_PACKS = [
   "scales_ember",
   "scales_pale",
   "scales_sulfur",
+  "scales_kin",
 ];
 
 export function speciesPack(id) {

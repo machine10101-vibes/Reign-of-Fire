@@ -133,13 +133,20 @@ export class Hunt {
   update(dt, player, weapon) {
     const playerVulnerable = weapon.bolts === 0 || weapon.reloading;
     let alliesAttacking = 0;
-    for (const e of this.entries) if (e.ai.state === "attack") alliesAttacking++;
+    let alliesEngaged = 0;
+    for (const e of this.entries) {
+      if (!e.dragon.alive) continue;
+      if (e.ai.state === "attack") alliesAttacking++;
+      // A beast running for the ash column is no help to anyone.
+      if (e.ai.engaged && e.ai.state !== "flee") alliesEngaged++;
+    }
 
     const ctx = {
       playerPos: player.position,
       playerVelocity: player.velocity,
       playerVulnerable,
       alliesAttacking,
+      alliesEngaged,
     };
 
     this.breathing = false;

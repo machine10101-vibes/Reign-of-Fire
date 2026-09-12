@@ -79,13 +79,36 @@ export class DragonAI {
   get aggressionNow() {
     const wounded = 1 - this.dragon.hpFraction;
     const nerve = this.mind.courage;
-    return THREE.MathUtils.clamp(this.mind.aggression + wounded * (nerve - 0.5) * 0.8, 0, 1);
+    return THREE.MathUtils.clamp(
+      this.mind.aggression + this._packNerve() + wounded * (nerve - 0.5) * 0.8,
+      0,
+      1
+    );
+  }
+
+  /**
+   * Courage borrowed from the rest of the pack. A packmate that has merely
+   * spotted the hunter is worth half of one that has actually committed, which
+   * is what lets a flight of three escalate off a single brave opener — and
+   * what makes killing one of them visibly cow the survivors.
+   */
+  _packNerve() {
+    if (!this.mind.packMinded) return 0;
+    const pack = (this._alliesEngaged ?? 0) * 0.5 + (this._alliesAttacking ?? 0);
+    return Math.min(pack, 3) * this.mind.packMinded;
   }
 
   update(dt, ctx) {
     this.t += dt;
     this.phaseT += dt;
     this._playerPos = ctx?.playerPos ?? null;
+    // The hunt counts the whole roster, so discount itself before asking how
+    // much company it has.
+    this._alliesAttacking = Math.max(
+      0,
+      (ctx?.alliesAttacking ?? 0) - (this.state === DragonState.ATTACK ? 1 : 0)
+    );
+    this._alliesEngaged = Math.max(0, (ctx?.alliesEngaged ?? 0) - (this.engaged ? 1 : 0));
     this.melee = 0;
     this.breath.active = false;
     this.charge = Math.max(0, this.charge - dt * 2);

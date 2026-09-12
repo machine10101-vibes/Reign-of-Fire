@@ -121,6 +121,18 @@ PRESETS = {
         "ao_strength": 0.5,
         "size": 768,
     },
+    "scales_kin_albedo.png": {
+        "stem": "scales_kin",
+        "normal_strength": 7.0,
+        "roughness_bias": 0.58,
+        "metallic": 0.45,
+        # The only red-dominant pixels are the rust staining in the seams, so
+        # keying the glow off red gives this hide a few cooling-iron streaks
+        # instead of the molten net the volcanic species carry.
+        "emissive_from_red": True,
+        "ao_strength": 0.65,
+        "size": 768,
+    },
     "burnt_bark_albedo.png": {
         "stem": "burnt_bark",
         "normal_strength": 7.5,

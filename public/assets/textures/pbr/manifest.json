@@ -300,6 +300,31 @@
     }
   },
   {
+    "source": "scales_kin_albedo.png",
+    "stem": "scales_kin",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/scales_kin_albedo.webp",
+      "normal": "public/assets/textures/pbr/scales_kin_normal.webp",
+      "roughness": "public/assets/textures/pbr/scales_kin_roughness.webp",
+      "metallic": "public/assets/textures/pbr/scales_kin_metallic.webp",
+      "ao": "public/assets/textures/pbr/scales_kin_ao.webp",
+      "emissive": "public/assets/textures/pbr/scales_kin_emissive.webp",
+      "height": "art/textures/height/scales_kin_height.png"
+    }
+  },
+  {
     "source": "burnt_bark_albedo.png",
     "stem": "burnt_bark",
     "resolution": [
