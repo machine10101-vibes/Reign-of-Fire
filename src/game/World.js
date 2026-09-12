@@ -33,6 +33,7 @@ export class World {
     this._buildTerrain(textures);
     this._buildLighting();
     this._buildVolcano(textures);
+    this._buildHorizon(textures);
     this._buildRocks(textures);
     this._buildSpires(textures);
     this._buildDeadTrees(textures);
@@ -307,6 +308,47 @@ export class World {
       const s = 0.8 + Math.random() * 1.9;
       d.scale.set(s, s * (0.8 + Math.random() * 1.1), s);
     });
+  }
+
+  /**
+   * Ridges past the playable ground. Fog swallows nearly all their shading at
+   * this range, which is the point: they read as layered silhouettes against
+   * the burning sky instead of letting the terrain stop in mid-air.
+   */
+  _buildHorizon(textures) {
+    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 3, 3);
+    const mat = standardFrom(pack, {
+      roughness: 0.95,
+      metalness: 0,
+      emissive: new THREE.Color(0.5, 0.07, 0.01),
+      emissiveIntensity: 0.1,
+      envMapIntensity: 0.18,
+    });
+    const geo = mergeGeometries([
+      transformed(new THREE.ConeGeometry(1, 1.1, 7), { pos: [0, 0.55, 0] }),
+      transformed(new THREE.ConeGeometry(0.78, 0.72, 6), { pos: [1.1, 0.36, 0.4], rot: [0, 0.6, 0.09] }),
+      transformed(new THREE.ConeGeometry(0.66, 0.5, 6), { pos: [-1.05, 0.25, -0.45], rot: [0, 0.3, -0.1] }),
+    ]);
+
+    const count = 40;
+    const mesh = new THREE.InstancedMesh(geo, mat, count);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < count; i++) {
+      // Two heavily overlapping bands: no single massif should read as a shape,
+      // and the near band has to break the far one's outline.
+      const band = i % 2;
+      const angle = (i / count) * Math.PI * 4 + (Math.random() - 0.5) * 0.3;
+      const radius = (band ? 300 : 400) + Math.random() * 70;
+      dummy.position.set(Math.cos(angle) * radius, -30, Math.sin(angle) * radius);
+      dummy.rotation.set(0, Math.random() * Math.PI, 0);
+      const width = 110 + Math.random() * 90;
+      dummy.scale.set(width, (band ? 52 : 88) + Math.random() * 60, width * (0.7 + Math.random() * 0.5));
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    this.horizon = mesh;
+    this.group.add(mesh);
   }
 
   _buildDeadTrees(textures) {
