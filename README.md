@@ -78,10 +78,26 @@ The frame is assembled in this order, and the order matters:
    and luminance-weighted film grain. These are photographic effects and have to
    run on display-referred pixels, not linear ones.
 
-The terrain height field carries relief at three scales — twenty-metre massifs,
-squared ridge noise in the three-to-ten metre band, and metre-scale rubble — at
-just over a metre per quad so the mid band resolves. Skipping the middle scale
-is what makes procedural terrain read as sand dunes, and no normal map fixes it.
+The terrain height field carries relief at four scales — eighty-metre swells,
+the ridge system, twenty-metre benches, and the six- and two-metre bands — at
+just over a metre per quad so all of them resolve. Two things have to be right
+or ground reads as sand dunes, and neither is a texturing problem. Every scale
+has to be occupied: skipping one leaves the height field interpolating smoothly
+across the gap. And the massif has to be shaped with a *ridged* multifractal
+rather than plain fbm, because fbm is rolling by construction — every octave is
+as likely to be a mound as a hollow — so an fbm landscape is sand at any scale
+and more octaves only make finer sand. Folding each octave about its midpoint
+gives crests with gullies between them, and weighting each octave by the one
+above concentrates fine detail on the crests the way erosion does.
+
+Rock is cut, not dented. Boulders are the intersection of eleven cutting planes
+spread over a Fibonacci spiral, so flat faces and hard edges fall out of the
+construction; a sphere displaced by noise is a lumpy ball, and at boulder size
+a lumpy ball is a mound of earth. Stone comes in two size classes with their own
+geometry density and texture repeat, because one repeat cannot serve both a
+knee-high stone and a five-metre block without smearing a tile across metres of
+rock on the big one.
+
 Terrain also samples its albedo and roughness twice, once for macro shape and
 once at eight times the frequency for detail underfoot, and its lava glow is
 gated on the crack mask so the emissive cannot out-radiate the rock. Dragon hides gate their

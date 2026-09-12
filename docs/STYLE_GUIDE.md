@@ -96,19 +96,28 @@ Concept: `art/concepts/weapon_ballista_concept.png`
 ## Environment — Caldera Ridge
 
 - Craggy displacement terrain, lava in the negative space, ash bleaching the
-  peaks via vertex colour. Relief at three scales: twenty-metre fbm massifs,
-  squared ridge noise in the three-to-ten metre band, and metre-scale rubble, at
-  just over a metre per quad so the mid band resolves. Leaving that middle band
-  out is what makes procedural terrain read as sand dunes rather than scoria,
-  and it is not a texturing problem — no normal map fixes it
+  peaks via vertex colour. Relief at four scales: eighty-metre swells, a ridged
+  multifractal massif, twenty-metre benches, and the six- and two-metre bands,
+  at just over a metre per quad so all of them resolve. Ground reads as dunes if
+  any scale is left empty *or* if the massif is plain fbm, which is rolling by
+  construction; neither is fixable with a normal map
+- The camp is levelled onto a shelf — macro bands only, so the six- and
+  two-metre relief survives and the shelf is flat without being a car park
 - Terrain samples its own albedo and roughness a second time at 8× frequency so
   the ground holds detail underfoot without a larger texture
 - Props, all instanced and scattered through a slope-and-elevation aware
-  sampler: fractured basalt boulders, obsidian outcrops, burnt dead groves,
-  dragon bone piles, toppled columnar ruins, animated lava pools. Outcrops are
-  sheared columns with flat broken tops, not needles — a scatter of five-sided
-  cones reads as shark teeth. Bone piles are dented and ash-caked; a clean
-  ellipsoid cranium catches the sky and reads as a pale egg on the slope
+  sampler: basalt boulders, knee-to-waist stone, scree, obsidian outcrops, burnt
+  dead groves, dragon bone piles, toppled columnar ruins, animated lava pools.
+  Outcrops are sheared columns with flat broken tops, not needles — a scatter of
+  five-sided cones reads as shark teeth. Bone piles are dented and ash-caked; a
+  clean ellipsoid cranium catches the sky and reads as a pale egg on the slope
+- Stone is cut rather than dented: the radius along a direction is the distance
+  to the nearest of eleven cutting planes, which is what gives it flat faces and
+  hard edges. Three throws of the planes for the boulders, because eighty
+  instances of one block is a pattern the eye picks up across open ground
+- Everything that reaches the eye is a collision blocker and the player pushes
+  out of it. Scree and knee-high stone deliberately are not: shuffling sideways
+  around gravel is worse than stepping over it
 - Landmarks: an erupting volcano on the horizon with a drifting plume, and the
   hunter's camp at the spawn point (staked trophy skulls, hide tarp, bonfire)
 - Ash particles (large, slow) + embers (small, rising), both recycled around the
