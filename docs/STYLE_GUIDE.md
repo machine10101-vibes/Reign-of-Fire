@@ -37,9 +37,17 @@ The playable vertical slice must read as **Unreal Engine 5 grit**, not fantasy i
   and creature grout are both gated on their crack masks, and heat pools in
   bands rather than covering a whole surface. A flat emissive term over rock or
   hide erases every bit of texture detail underneath it.
-- **Depth:** two overlapping bands of fogged massifs sit at 300–470m. At that
-  range exponential fog takes almost all of their shading, which is the point —
+- **Depth:** three overlapping fogged skylines sit at 300–470m. At that range
+  exponential fog takes all but a tenth of their shading, which is the point —
   they are silhouettes layered against the burning sky, not modelled mountains.
+  For the same reason they are noise-driven curtains and not geometry: a cone
+  silhouettes as a triangle however much its flanks are displaced, and a ring
+  of them reads as tents pitched around the map.
+- **Translucency:** wing membranes are lit through as well as on. A wing spread
+  against a burning sky with a low raking key light is backlit most of the time,
+  and without transmission the largest panel on the beast goes to a flat dark
+  board. Strongest face-on, where the path through the membrane is shortest, and
+  multiplied by the hide colour so the vanes and finger bones stay silhouetted.
 
 ## Creature language
 
@@ -49,6 +57,11 @@ Every species is generated from one entry in `src/game/species.js`. The shared
 rig is: chest lathe → neck×2-3 → skull/jaw with teeth; dorsal spine spikes;
 tail×4-7 with a barb; two wings (shoulder, upper arm, scalloped membrane, three
 finger bones, tip hook); four legs (thigh, shin, foot, three talons).
+
+The membrane is lofted as a cambered grid between its leading and trailing
+splines, bowed under between the arm and the trailing edge, with the bays
+falling between the finger bones. A triangulated outline has no interior
+vertices to displace and stays planar however its silhouette is shaped.
 
 Species read apart at silhouette distance first, colour second:
 
@@ -60,6 +73,7 @@ Species read apart at silhouette distance first, colour second:
 | Sulfurmaw | Longest neck, oversized head, no spikes | Yellow-green crust, toxic emissive |
 | Pale Stalker | Longest tail, four tall horns | Ash-bleached cracked hide, cold blue eyes, almost no glow |
 | Basalt Tyrant | Squat and huge, six horns, short wings | Cooled columnar rock, matte, barely glows |
+| Rustwing | Small, widest wingspan for its body, three low horns | Slate keeled scales with rust staining in the seams; the only cold-blooded set, 6% of the hide lit against the Cinderwyrm's 29% |
 
 Scale tiling is derived from body size, not left in UV space. Uniformly scaling
 the root is what gave the Basalt Tyrant plates four times the size of an
@@ -81,13 +95,20 @@ Concept: `art/concepts/weapon_ballista_concept.png`
 
 ## Environment — Caldera Ridge
 
-- Craggy displacement terrain (fbm + ridge noise + caldera basin), lava in the
-  negative space, ash bleaching the peaks via vertex colour
+- Craggy displacement terrain, lava in the negative space, ash bleaching the
+  peaks via vertex colour. Relief at three scales: twenty-metre fbm massifs,
+  squared ridge noise in the three-to-ten metre band, and metre-scale rubble, at
+  just over a metre per quad so the mid band resolves. Leaving that middle band
+  out is what makes procedural terrain read as sand dunes rather than scoria,
+  and it is not a texturing problem — no normal map fixes it
 - Terrain samples its own albedo and roughness a second time at 8× frequency so
   the ground holds detail underfoot without a larger texture
 - Props, all instanced and scattered through a slope-and-elevation aware
-  sampler: fractured basalt boulders, obsidian spire clusters, burnt dead
-  groves, dragon bone piles, toppled columnar ruins, animated lava pools
+  sampler: fractured basalt boulders, obsidian outcrops, burnt dead groves,
+  dragon bone piles, toppled columnar ruins, animated lava pools. Outcrops are
+  sheared columns with flat broken tops, not needles — a scatter of five-sided
+  cones reads as shark teeth. Bone piles are dented and ash-caked; a clean
+  ellipsoid cranium catches the sky and reads as a pale egg on the slope
 - Landmarks: an erupting volcano on the horizon with a drifting plume, and the
   hunter's camp at the spawn point (staked trophy skulls, hide tarp, bonfire)
 - Ash particles (large, slow) + embers (small, rising), both recycled around the
@@ -96,7 +117,7 @@ Concept: `art/concepts/weapon_ballista_concept.png`
 
 ## Material sets
 
-Fifteen baked sets. Source albedos live in `art/textures/source/`; the baker
+Sixteen baked sets. Source albedos live in `art/textures/source/`; the baker
 writes the six maps the renderer samples as WebP q90 into
 `public/assets/textures/pbr/`, and height maps to `art/textures/height/` for
 offline/Blender use only.
@@ -104,7 +125,7 @@ offline/Blender use only.
 | Set | Used by |
 | --- | --- |
 | `dragon_scales`, `dragon_wing` | Ashwrought body, all wing membranes |
-| `scales_cinder`, `scales_basalt`, `scales_pale`, `scales_sulfur`, `scales_ember` | Per-species hides, streamed on spawn |
+| `scales_cinder`, `scales_basalt`, `scales_pale`, `scales_sulfur`, `scales_ember`, `scales_kin` | Per-species hides, streamed on spawn |
 | `terrain_rock` | Terrain, boulders, ruins, volcano |
 | `obsidian`, `bone`, `burnt_bark` | Spires, bone piles, dead groves |
 | `lava` | Pools |
