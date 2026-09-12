@@ -187,7 +187,7 @@ export class Combat {
       m.mesh.rotation.y += dt * 3;
       m.life -= dt;
       const pos = m.mesh.position;
-      this.particles.burst(this.particles.ember, pos, _v.set(0, 0.4, 0), 2, 3, 3);
+      this.particles.burst(this.particles.spark, pos, _v.set(0, 0.4, 0), 2, 3, 3);
       const ground = this.world.heightAt(pos.x, pos.z);
       if (pos.y <= ground + 0.6 || m.life <= 0) {
         this._explode(pos, m.damage, player);
@@ -199,7 +199,7 @@ export class Combat {
 
   _explode(pos, damage, player) {
     this.particles.burst(this.particles.fire, pos, _v.set(0, 1, 0), 70, 16, 14);
-    this.particles.burst(this.particles.ember, pos, _v.set(0, 1, 0), 40, 12, 10);
+    this.particles.burst(this.particles.spark, pos, _v.set(0, 1, 0), 40, 12, 10);
     this.particles.burst(this.particles.chips, pos, _v.set(0, 1, 0), 26, 10, 8);
     this.audio.explode();
     const dist = pos.distanceTo(player.position);
