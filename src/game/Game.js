@@ -42,22 +42,25 @@ export class Game {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.28;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.08, 600);
+    this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 700);
     this.camera.rotation.order = "YXZ";
+    this.scene.add(this.camera);
 
     this.world = new World(this.scene, textures);
     this.player = new Player(this.camera, this.world);
-    this.player.position.set(6, this.world.heightAt(6, 22) + CONFIG.player.eye, 22);
+    this.player.position.set(2, this.world.heightAt(2, 46) + CONFIG.player.eye, 46);
+    this.player.yaw = 0.04;
+    this.player.pitch = -0.32;
     this.player.bind(this.canvas);
     this.weapon = new Weapon(this.camera, textures);
 
     this.dragon = new Dragon(textures);
-    this.dragon.root.position.set(40, CONFIG.dragon.patrolHeight, -24);
+    this.dragon.root.position.set(8, CONFIG.dragon.patrolHeight, -36);
     this.scene.add(this.dragon.root);
     this.ai = new DragonAI(this.dragon);
 
@@ -65,6 +68,9 @@ export class Game {
     this.combat = new Combat(this.scene, this.world, this.dragon, this.particles, this.audio);
     this.fx = new PostFX(this.renderer, this.scene, this.camera);
     this.demo = new DemoDirector(this.player, this.weapon);
+    this.world.setQuality(this.perf.tier);
+    this.particles.setQuality(this.perf.tier);
+    this.fx.setQuality(this.perf.tier);
 
     this.perf.onChange((tier) => {
       this.world.setQuality(tier);

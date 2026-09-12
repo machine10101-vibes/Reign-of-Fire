@@ -1,7 +1,7 @@
 export const CONFIG = {
   title: "Reign of Fire",
   worldSize: 280,
-  terrainSegments: 160,
+  terrainSegments: 112,
   player: {
     eye: 1.72,
     speed: 7.4,
@@ -24,18 +24,18 @@ export const CONFIG = {
   },
   dragon: {
     hp: 1100,
-    patrolRadius: 78,
-    patrolHeight: 52,
+    patrolRadius: 22,
+    patrolHeight: 36,
     flySpeed: 22,
     diveSpeed: 38,
-    spotRange: 110,
-    breathRange: 34,
+    spotRange: 140,
+    breathRange: 42,
     breathDamage: 18,
-    bodyScale: 2.35,
+    bodyScale: 8.2,
   },
   quality: {
     targetFps: 60,
-    particleAsh: 1400,
-    particleEmber: 420,
+    particleAsh: 700,
+    particleEmber: 180,
   },
 };

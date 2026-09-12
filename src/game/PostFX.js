@@ -55,10 +55,11 @@ export class PostFX {
     this.renderer = renderer;
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.7, 0.35);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.55, 0.48);
     this.composer.addPass(this.bloom);
-    this.after = new AfterimagePass(0.78);
+    this.after = new AfterimagePass(0.12);
     this.composer.addPass(this.after);
+    this.after.enabled = false;
     this.composite = new ShaderPass(CompositeShader);
     this.composer.addPass(this.composite);
     this.composer.addPass(new OutputPass());
@@ -74,13 +75,14 @@ export class PostFX {
     this.composite.uniforms.uHeat.value = heat;
     this.composite.uniforms.uShake.value = shake;
     this.composite.uniforms.uBlur.value = blur;
-    this.after.uniforms.damp.value = THREE.MathUtils.lerp(0.18, 0.42, blur);
+    this.after.uniforms.damp.value = THREE.MathUtils.lerp(0.08, 0.22, blur);
     this.composer.render();
   }
 
   setQuality(tier) {
     this.bloom.enabled = tier === "cinematic" || tier === "high";
     this.after.enabled = tier === "cinematic";
-    this.bloom.strength = tier === "cinematic" ? 0.55 : 0.32;
+    this.bloom.strength = tier === "cinematic" ? 0.36 : 0.22;
+    this.after.enabled = tier === "cinematic";
   }
 }

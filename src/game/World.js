@@ -63,7 +63,7 @@ export class World {
       const mountain = fbm(x * 0.018, z * 0.018, 5);
       const ridges = ridge(x * 0.021, z * 0.02);
       const crater = Math.hypot(x, z + 18);
-      const caldera = Math.exp(-((crater - 42) ** 2) / 380) * 7;
+      const caldera = Math.exp(-((crater - 42) ** 2) / 380) * 3.2;
       const h = mountain * 16.5 + ridges * 11.5 - caldera + 2.2;
       pos.setY(i, h);
       const ix = Math.round(((x + this.size / 2) / this.size) * n);
@@ -115,7 +115,7 @@ export class World {
         `#include <emissivemap_fragment>
          float lava = 1.0 - smoothstep(2.4, 6.8, vWorldY);
          float pulse = 0.65 + 0.35 * sin(uTime * 1.7 + vWorldY * 0.4);
-         totalEmissiveRadiance += vec3(1.0, 0.22, 0.04) * lava * pulse * 1.8;`
+         totalEmissiveRadiance += vec3(1.0, 0.22, 0.04) * lava * pulse * 0.55;`
       );
     };
 
@@ -133,38 +133,43 @@ export class World {
       emissive: new THREE.Color(0.4, 0.05, 0.01),
       emissiveIntensity: 0.2,
     });
-    const count = 220;
+    const count = 90;
     this.rocks = new THREE.InstancedMesh(geo, mat, count);
     this.rocks.castShadow = true;
     this.rocks.receiveShadow = true;
     const dummy = new THREE.Object3D();
-    for (let i = 0; i < count; i++) {
+    let placed = 0;
+    let guard = 0;
+    while (placed < count && guard < 800) {
+      guard++;
       const a = Math.random() * Math.PI * 2;
-      const r = 18 + Math.random() * 118;
-      const x = Math.cos(a) * r + (Math.random() - 0.5) * 16;
-      const z = Math.sin(a) * r + (Math.random() - 0.5) * 16;
+      const r = 22 + Math.random() * 110;
+      const x = Math.cos(a) * r + (Math.random() - 0.5) * 10;
+      const z = Math.sin(a) * r + (Math.random() - 0.5) * 10;
+      if (Math.hypot(x - 2, z - 46) < 18) continue;
       const y = this.heightAt(x, z);
-      dummy.position.set(x, y + 0.2, z);
-      dummy.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.4);
-      const s = 1.2 + Math.random() * 4.8;
-      dummy.scale.set(s * (0.7 + Math.random() * 0.6), s, s * (0.7 + Math.random() * 0.6));
+      dummy.position.set(x, y + 0.4, z);
+      dummy.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.3);
+      const s = 0.9 + Math.random() * 2.4;
+      dummy.scale.set(s * (0.7 + Math.random() * 0.5), s * (0.8 + Math.random() * 0.5), s * (0.7 + Math.random() * 0.5));
       dummy.updateMatrix();
-      this.rocks.setMatrixAt(i, dummy.matrix);
+      this.rocks.setMatrixAt(placed, dummy.matrix);
+      placed++;
     }
     this.group.add(this.rocks);
   }
 
   _buildLighting() {
-    this.scene.fog = new THREE.FogExp2(0x1a140f, 0.0125);
+    this.scene.fog = new THREE.FogExp2(0x1a140f, 0.0068);
     this.scene.background = new THREE.Color(0x120e0c);
 
-    this.hemi = new THREE.HemisphereLight(0x6a5344, 0x1a0a04, 0.55);
+    this.hemi = new THREE.HemisphereLight(0x8a6a55, 0x1a0a04, 0.95);
     this.group.add(this.hemi);
 
     this.sun = new THREE.DirectionalLight(0xff9a55, 2.35);
     this.sun.position.set(-70, 48, 30);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(1024, 1024);
     this.sun.shadow.camera.near = 4;
     this.sun.shadow.camera.far = 260;
     this.sun.shadow.camera.left = -90;

@@ -19,7 +19,7 @@ export class DragonAI {
     this.angle = 0;
     this.target = new THREE.Vector3();
     this.velocity = new THREE.Vector3();
-    this.center = new THREE.Vector3(0, CONFIG.dragon.patrolHeight, -8);
+    this.center = new THREE.Vector3(6, CONFIG.dragon.patrolHeight, -28);
     this.hint = "Ashwrought patrols the ash ceiling.";
     this.breathing = false;
     this.spotTimer = 0;
@@ -83,9 +83,9 @@ export class DragonAI {
     this.angle += dt * 0.42;
     const r = CONFIG.dragon.patrolRadius;
     this.target.set(
-      Math.cos(this.angle) * r,
-      CONFIG.dragon.patrolHeight + Math.sin(this.t * 0.7) * 4.5,
-      Math.sin(this.angle) * r * 0.78 - 10
+      this.center.x + Math.cos(this.angle) * r,
+      this.center.y + Math.sin(this.t * 0.7) * 3.2,
+      this.center.z + Math.sin(this.angle) * r * 0.55
     );
     this.velocity.subVectors(this.target, this.dragon.root.position);
     const dist = playerPos.distanceTo(this.dragon.root.position);

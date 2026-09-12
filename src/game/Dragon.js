@@ -29,7 +29,7 @@ export class Dragon {
       metalness: 0.22,
       roughness: 0.42,
       emissive: new THREE.Color(1.15, 0.18, 0.03),
-      emissiveIntensity: 1.65,
+      emissiveIntensity: 2.4,
       normalScale: new THREE.Vector2(1.6, 1.6),
     });
     textures.dragon_scales.albedo.repeat.set(3.5, 2.2);
@@ -139,20 +139,31 @@ export class Dragon {
     this.bones.wings = [];
     for (const side of [-1, 1]) {
       const wingRoot = new THREE.Group();
-      wingRoot.position.set(0.1, 0.35, 0.55 * side);
+      wingRoot.position.set(0.15, 0.4, 0.62 * side);
       chest.add(wingRoot);
-      const upper = boneMesh(new THREE.CylinderGeometry(0.12, 0.2, 3.4, 8), body);
+
+      const upper = boneMesh(new THREE.CylinderGeometry(0.08, 0.16, 3.2, 8), body);
       upper.rotation.x = Math.PI / 2;
-      upper.position.z = 1.6 * side;
+      upper.position.set(-0.2, 0.1, 1.5 * side);
       wingRoot.add(upper);
-      const membrane = boneMesh(new THREE.PlaneGeometry(4.6, 2.6, 6, 3), wing);
-      membrane.position.set(-0.6, -0.35, 2.1 * side);
-      membrane.rotation.y = side * 0.15;
+
+      const shape = new THREE.Shape();
+      shape.moveTo(0, 0);
+      shape.lineTo(2.6, 0.35 * side);
+      shape.lineTo(4.1, 0.1 * side);
+      shape.lineTo(3.2, -1.3 * side);
+      shape.lineTo(1.1, -1.05 * side);
+      shape.lineTo(0.15, -0.25 * side);
+      const membrane = boneMesh(new THREE.ShapeGeometry(shape), wing);
+      membrane.rotation.y = -Math.PI / 2;
+      membrane.rotation.z = side * 0.08;
+      membrane.position.set(-0.4, -0.15, 0.35 * side);
       wingRoot.add(membrane);
-      const finger = boneMesh(new THREE.CylinderGeometry(0.05, 0.08, 3.8, 6), body);
+
+      const finger = boneMesh(new THREE.CylinderGeometry(0.04, 0.07, 3.4, 6), body);
       finger.rotation.x = Math.PI / 2;
-      finger.rotation.y = -0.4 * side;
-      finger.position.set(-1.4, -0.1, 2.4 * side);
+      finger.rotation.y = -0.35 * side;
+      finger.position.set(-1.1, -0.15, 2.0 * side);
       wingRoot.add(finger);
       this.bones.wings.push(wingRoot);
       this._addHit("wing", membrane, 0.55);
@@ -174,6 +185,9 @@ export class Dragon {
     }
 
     this.root.rotation.y = Math.PI / 2;
+    const glow = new THREE.PointLight(0xff4a12, 22, 48, 1.4);
+    this.root.add(glow);
+    this.glow = glow;
   }
 
   mouthWorld(target = new THREE.Vector3()) {
@@ -194,9 +208,9 @@ export class Dragon {
 
   update(dt, pose) {
     this.anim += dt;
-    const flap = Math.sin(this.anim * 3.4) * 0.55;
-    this.bones.wings[0].rotation.x = flap;
-    this.bones.wings[1].rotation.x = -flap;
+    const flap = Math.sin(this.anim * 3.4) * 0.42;
+    this.bones.wings[0].rotation.z = flap;
+    this.bones.wings[1].rotation.z = flap;
     this.bones.neckA.rotation.z = Math.sin(this.anim * 1.4) * 0.08;
     this.bones.neckB.rotation.z = Math.sin(this.anim * 1.4 + 0.4) * 0.1;
     this.bones.tail.forEach((seg, i) => {
@@ -206,7 +220,8 @@ export class Dragon {
     this.pain = Math.max(0, this.pain - dt);
     this.jaw = THREE.MathUtils.damp(this.jaw, pose.jaw ?? 0, 6, dt);
     this.jawBone.rotation.z = this.jaw;
-    this.materials.body.emissiveIntensity = 1.45 + Math.sin(this.anim * 2.2) * 0.35 + this.pain * 1.4;
+    this.materials.body.emissiveIntensity = 2.8 + Math.sin(this.anim * 2.2) * 0.7 + this.pain * 2;
+    if (this.glow) this.glow.intensity = 18 + Math.sin(this.anim * 2.2) * 6;
 
     if (pose.dead) {
       this.root.rotation.x = THREE.MathUtils.damp(this.root.rotation.x, 1.05, 2.2, dt);

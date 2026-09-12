@@ -4,7 +4,7 @@ export class PerformanceMonitor {
   constructor() {
     this.samples = [];
     this.fps = 60;
-    this.tier = "cinematic";
+    this.tier = "high";
     this.listeners = [];
   }
 

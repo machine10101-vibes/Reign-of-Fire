@@ -13,7 +13,10 @@ export class Weapon {
     this.recoil = 0;
     this.kick = 0;
     this._build(textures);
-    camera.add(this.group);
+    this.camera.add(this.group);
+    const fill = new THREE.PointLight(0xffc8a0, 1.4, 4, 1);
+    fill.position.set(0.05, 0.15, 0.25);
+    camera.add(fill);
   }
 
   get reloading() {
@@ -35,8 +38,13 @@ export class Weapon {
       roughness: 0.74,
     });
 
-    this.group.position.set(0.18, -0.28, -0.55);
-    this.group.rotation.set(0.04, 0.04, 0);
+    this.group.position.set(0.22, -0.32, -0.62);
+    this.group.rotation.set(0.02, 0.02, 0);
+    this.group.scale.setScalar(1.45);
+    this.group.traverse((o) => {
+      o.frustumCulled = false;
+      o.renderOrder = 10;
+    });
 
     const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.62), metal);
     this.group.add(receiver);
@@ -153,8 +161,8 @@ export class Weapon {
     this.kick = THREE.MathUtils.damp(this.kick, 0, 8, dt);
     this.recoil = THREE.MathUtils.damp(this.recoil, 0, 10, dt);
     const bob = Math.sin(performance.now() * 0.008) * (moving ? 0.018 : 0.004);
-    this.group.position.set(0.18, -0.28 + bob - this.kick * 0.04, -0.55 + this.kick * 0.05);
-    this.group.rotation.set(0.04 + this.recoil, 0.04, this.kick * 0.04);
-    if (aimingHot) this.group.position.x = 0.14;
+    this.group.position.set(0.22, -0.32 + bob - this.kick * 0.05, -0.62 + this.kick * 0.06);
+    this.group.rotation.set(0.02 + this.recoil, 0.04, this.kick * 0.04);
+    if (aimingHot) this.group.position.x = 0.16;
   }
 }
