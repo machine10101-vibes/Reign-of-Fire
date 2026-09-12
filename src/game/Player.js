@@ -21,6 +21,12 @@ export class Player {
     this.grounded = true;
     this.sprint = false;
     this.crouch = false;
+    // How fast the view is turning, in radians per second. Measured from the
+    // angles themselves rather than from mouse deltas so that the demo
+    // director, which writes yaw and pitch directly, swings the weapon too.
+    this.turnRate = { x: 0, y: 0 };
+    this._lastYaw = this.yaw;
+    this._lastPitch = this.pitch;
     this._euler = new THREE.Euler(0, 0, 0, "YXZ");
     this._wish = new THREE.Vector3();
     this._forward = new THREE.Vector3();
@@ -77,6 +83,14 @@ export class Player {
   }
 
   update(dt) {
+    // Clamped, because a respawn rewrites the pitch outright and an unbounded
+    // rate would throw the weapon off the screen for a frame.
+    const step = Math.max(dt, 1 / 240);
+    this.turnRate.x = THREE.MathUtils.clamp((this.yaw - this._lastYaw) / step, -14, 14);
+    this.turnRate.y = THREE.MathUtils.clamp((this.pitch - this._lastPitch) / step, -14, 14);
+    this._lastYaw = this.yaw;
+    this._lastPitch = this.pitch;
+
     this.sprint = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
     this.crouch = this.keys.has("KeyC") || this.keys.has("ControlLeft");
     const speed = this.crouch ? CONFIG.player.crouch : this.sprint ? CONFIG.player.sprint : CONFIG.player.speed;
@@ -91,8 +105,9 @@ export class Player {
     const moving = this._wish.lengthSq() > 0;
     if (moving) this._wish.normalize();
 
-    this.velocity.x = THREE.MathUtils.damp(this.velocity.x, this._wish.x * speed, 8, dt);
-    this.velocity.z = THREE.MathUtils.damp(this.velocity.z, this._wish.z * speed, 8, dt);
+    const accel = CONFIG.player.accel;
+    this.velocity.x = THREE.MathUtils.damp(this.velocity.x, this._wish.x * speed, accel, dt);
+    this.velocity.z = THREE.MathUtils.damp(this.velocity.z, this._wish.z * speed, accel, dt);
 
     const ground = this.world.heightAt(this.position.x, this.position.z);
     const eye = CONFIG.player.eye * (this.crouch ? 0.68 : 1);
@@ -120,7 +135,7 @@ export class Player {
     this.position.x = THREE.MathUtils.clamp(this.position.x, -limit, limit);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -limit, limit);
 
-    this.world.resolveCollision(this.position, 0.5);
+    this.world.resolveCollision(this.position, CONFIG.player.radius);
 
     this.didStep = false;
     const horiz = Math.hypot(this.velocity.x, this.velocity.z);

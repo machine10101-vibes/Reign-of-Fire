@@ -9,11 +9,15 @@ export const CONFIG = {
     speed: 7.4,
     sprint: 12.2,
     crouch: 3.6,
-    accel: 38,
+    // Damping rate in 1/s for reaching full speed, not an acceleration in
+    // m/s². Low enough that the hunter has some weight, high enough that a
+    // sidestep away from a mortar still happens when you ask for it.
+    accel: 9,
     gravity: 22,
     jump: 8.5,
     mouse: 0.0018,
-    radius: 0.42,
+    // Half-width of the hunter for the purposes of walking into scenery.
+    radius: 0.5,
   },
   weapon: {
     bolts: 8,
@@ -22,7 +26,9 @@ export const CONFIG = {
     reload: 2.15,
     recoil: 0.034,
     cooldown: 0.62,
-    mass: 0.42,
+    // Kilograms of moving mass, near enough. Drives how far the weapon is
+    // thrown by a shot and how sluggishly it settles back onto the aim.
+    mass: 4.6,
     damage: 85,
   },
   hunt: {
