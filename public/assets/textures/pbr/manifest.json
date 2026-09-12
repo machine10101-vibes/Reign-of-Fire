@@ -1,0 +1,128 @@
+[
+  {
+    "source": "dragon_scales_albedo.png",
+    "stem": "dragon_scales",
+    "resolution": [
+      1024,
+      1024
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/dragon_scales_albedo.png",
+      "normal": "public/assets/textures/pbr/dragon_scales_normal.png",
+      "roughness": "public/assets/textures/pbr/dragon_scales_roughness.png",
+      "metallic": "public/assets/textures/pbr/dragon_scales_metallic.png",
+      "height": "public/assets/textures/pbr/dragon_scales_height.png",
+      "ao": "public/assets/textures/pbr/dragon_scales_ao.png",
+      "emissive": "public/assets/textures/pbr/dragon_scales_emissive.png"
+    }
+  },
+  {
+    "source": "dragon_wing_albedo.png",
+    "stem": "dragon_wing",
+    "resolution": [
+      1024,
+      1024
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/dragon_wing_albedo.png",
+      "normal": "public/assets/textures/pbr/dragon_wing_normal.png",
+      "roughness": "public/assets/textures/pbr/dragon_wing_roughness.png",
+      "metallic": "public/assets/textures/pbr/dragon_wing_metallic.png",
+      "height": "public/assets/textures/pbr/dragon_wing_height.png",
+      "ao": "public/assets/textures/pbr/dragon_wing_ao.png",
+      "emissive": "public/assets/textures/pbr/dragon_wing_emissive.png"
+    }
+  },
+  {
+    "source": "terrain_rock_albedo.png",
+    "stem": "terrain_rock",
+    "resolution": [
+      1024,
+      1024
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/terrain_rock_albedo.png",
+      "normal": "public/assets/textures/pbr/terrain_rock_normal.png",
+      "roughness": "public/assets/textures/pbr/terrain_rock_roughness.png",
+      "metallic": "public/assets/textures/pbr/terrain_rock_metallic.png",
+      "height": "public/assets/textures/pbr/terrain_rock_height.png",
+      "ao": "public/assets/textures/pbr/terrain_rock_ao.png",
+      "emissive": "public/assets/textures/pbr/terrain_rock_emissive.png"
+    }
+  },
+  {
+    "source": "weapon_metal_albedo.png",
+    "stem": "weapon_metal",
+    "resolution": [
+      1024,
+      1024
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/weapon_metal_albedo.png",
+      "normal": "public/assets/textures/pbr/weapon_metal_normal.png",
+      "roughness": "public/assets/textures/pbr/weapon_metal_roughness.png",
+      "metallic": "public/assets/textures/pbr/weapon_metal_metallic.png",
+      "height": "public/assets/textures/pbr/weapon_metal_height.png",
+      "ao": "public/assets/textures/pbr/weapon_metal_ao.png",
+      "emissive": "public/assets/textures/pbr/weapon_metal_emissive.png"
+    }
+  },
+  {
+    "source": "weapon_wood_albedo.png",
+    "stem": "weapon_wood",
+    "resolution": [
+      1024,
+      1024
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/weapon_wood_albedo.png",
+      "normal": "public/assets/textures/pbr/weapon_wood_normal.png",
+      "roughness": "public/assets/textures/pbr/weapon_wood_roughness.png",
+      "metallic": "public/assets/textures/pbr/weapon_wood_metallic.png",
+      "height": "public/assets/textures/pbr/weapon_wood_height.png",
+      "ao": "public/assets/textures/pbr/weapon_wood_ao.png",
+      "emissive": "public/assets/textures/pbr/weapon_wood_emissive.png"
+    }
+  },
+  {
+    "source": "leather_glove_albedo.png",
+    "stem": "leather_glove",
+    "resolution": [
+      1024,
+      1024
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/leather_glove_albedo.png",
+      "normal": "public/assets/textures/pbr/leather_glove_normal.png",
+      "roughness": "public/assets/textures/pbr/leather_glove_roughness.png",
+      "metallic": "public/assets/textures/pbr/leather_glove_metallic.png",
+      "height": "public/assets/textures/pbr/leather_glove_height.png",
+      "ao": "public/assets/textures/pbr/leather_glove_ao.png",
+      "emissive": "public/assets/textures/pbr/leather_glove_emissive.png"
+    }
+  },
+  {
+    "source": "lava_emissive.png",
+    "stem": "lava",
+    "resolution": [
+      1024,
+      1024
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/lava_albedo.png",
+      "normal": "public/assets/textures/pbr/lava_normal.png",
+      "roughness": "public/assets/textures/pbr/lava_roughness.png",
+      "metallic": "public/assets/textures/pbr/lava_metallic.png",
+      "height": "public/assets/textures/pbr/lava_height.png",
+      "ao": "public/assets/textures/pbr/lava_ao.png",
+      "emissive": "public/assets/textures/pbr/lava_emissive.png"
+    }
+  },
+  {
+    "source": "sky_ash_storm.png",
+    "stem": "sky",
+    "maps": {
+      "env": "public/assets/textures/pbr/sky_ash_storm.png"
+    }
+  }
+]

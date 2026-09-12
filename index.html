@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reign of Fire</title>
+    <link rel="icon" href="./favicon.svg" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="gl"></canvas>
+      <div id="title-screen">
+        <img id="title-art" src="./assets/art/visual_target_fps.png" alt="Reign of Fire visual target" />
+        <div id="title-copy">
+          <p class="eyebrow">Vertical slice</p>
+          <h1>Reign of Fire</h1>
+          <p class="tag">Caldera Ridge · Ashwrought hunt</p>
+          <button id="hunt-btn" type="button">Begin the hunt</button>
+          <p class="controls">
+            WASD move · Mouse look · LMB fire · R reload · Shift sprint · C crouch
+          </p>
+          <p class="controls sub">
+            Autoplay cinematic: add <code>?autoplay=1</code>
+          </p>
+        </div>
+      </div>
+      <div id="hud" class="hidden">
+        <div id="vignette"></div>
+        <div id="heat"></div>
+        <div id="crosshair"></div>
+        <div id="hitmarker"></div>
+        <div id="top-left">
+          <div class="meter">
+            <span>Hunter</span>
+            <div class="bar"><i id="hp-fill"></i></div>
+          </div>
+          <div class="meter">
+            <span>Ashpiercer</span>
+            <div id="bolts">8 / 8</div>
+          </div>
+        </div>
+        <div id="top-right">
+          <div id="fps">60 FPS</div>
+          <div id="quality">Cinematic</div>
+        </div>
+        <div id="beast">
+          <span>Ashwrought</span>
+          <div class="bar beast"><i id="beast-fill"></i></div>
+        </div>
+        <div id="hint">The ridge is watching.</div>
+      </div>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

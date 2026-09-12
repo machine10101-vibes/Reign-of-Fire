@@ -1,0 +1,47 @@
+{
+  "weapon": {
+    "name": "weapon_ballista",
+    "verts": 496,
+    "faces": 688
+  },
+  "terrain": {
+    "name": "terrain_ridge",
+    "verts": 9216,
+    "faces": 18050
+  },
+  "dragon": {
+    "name": "dragon_ashwrought",
+    "verts": 840,
+    "faces": 1440
+  },
+  "animations": {
+    "fly": {
+      "duration": 1.6,
+      "loop": true,
+      "channels": {
+        "wing_l_upper.z": "sin",
+        "wing_r_upper.z": "-sin"
+      }
+    },
+    "dive": {
+      "duration": 0.8,
+      "loop": false,
+      "rootPitch": -0.55
+    },
+    "breathe": {
+      "duration": 1.4,
+      "loop": false,
+      "jawOpen": 0.7
+    },
+    "pain": {
+      "duration": 0.5,
+      "loop": false,
+      "recoil": 0.35
+    },
+    "death": {
+      "duration": 2.4,
+      "loop": false,
+      "rootPitch": 1.1
+    }
+  }
+}

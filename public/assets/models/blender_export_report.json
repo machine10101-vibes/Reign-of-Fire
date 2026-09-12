@@ -1,0 +1,7 @@
+{
+  "blenderMcp": "unavailable in this agent \u2014 using bpy fallback if Blender is installed",
+  "pbr": "/workspace/public/assets/textures/pbr",
+  "exported": null,
+  "ok": false,
+  "reason": "bpy not installed; WebGL runtime scene is the playable map"
+}
