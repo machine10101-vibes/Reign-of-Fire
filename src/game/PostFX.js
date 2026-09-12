@@ -59,13 +59,13 @@ const CompositeShader = {
       float b = texture2D(tDiffuse, uv - centred * disperse).b;
       vec3 color = grade(vec3(r, c.g, b));
 
-      float vig = smoothstep(1.02, 0.32, length(centred));
-      color *= mix(vig, vig * vig, uDamage);
+      float vig = smoothstep(1.35, 0.40, length(centred));
+      color *= mix(mix(1.0, vig, 0.55), vig, uDamage);
 
       // Grain sits mostly in the shadows, the way film stock behaves.
       float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
       float g = grain(uv * vec2(1920.0, 1080.0));
-      color += (g - 0.5) * mix(0.05, 0.014, smoothstep(0.0, 0.6, luma));
+      color += (g - 0.5) * mix(0.028, 0.008, smoothstep(0.0, 0.6, luma));
 
       color = mix(color, color * vec3(1.1, 0.72, 0.48), uHeat * 0.35);
       color = mix(color, vec3(luma * 0.9, luma * 0.42, luma * 0.38), uDamage * 0.5);
@@ -84,14 +84,26 @@ export class PostFX {
     this.after = new AfterimagePass(0.12);
     this.composer.addPass(this.after);
     this.after.enabled = false;
+    // Bloom and the afterimage belong on the linear HDR buffer, but the grade,
+    // vignette and grain are photographic effects: they have to run on
+    // display-referred pixels, so OutputPass tone maps first.
+    this.composer.addPass(new OutputPass());
     this.composite = new ShaderPass(CompositeShader);
     this.composer.addPass(this.composite);
-    this.composer.addPass(new OutputPass());
     this.enabled = true;
   }
 
   resize(w, h) {
     this.composer.setSize(w, h);
+  }
+
+  /**
+   * The composer owns its own render targets, so it has to be told about a
+   * resolution change too; otherwise every pass keeps shading the old,
+   * larger buffer and the downscale saves nothing.
+   */
+  setPixelRatio(ratio) {
+    this.composer.setPixelRatio(ratio);
   }
 
   render(dt, { heat = 0, shake = 0, blur = 0.35, damage = 0 }) {
