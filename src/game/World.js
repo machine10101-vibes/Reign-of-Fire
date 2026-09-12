@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { CONFIG } from "./config.js";
-import { fbm, ridge, noise2 } from "./utils/noise.js";
+import { fbm, fbm3, hash, ridge, noise2 } from "./utils/noise.js";
 import { standardFrom, setRepeat } from "./assets.js";
 
 const SPAWN = new THREE.Vector2(2, 46);
@@ -29,6 +29,55 @@ function weathered(geo, amount, seed) {
     pos.setXYZ(i, x * dent, y * (1 - amount * fbm(z * 1.4 - seed, y * 1.4 + seed, 2)), z * dent);
   }
   geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * A block of stone: the intersection of a handful of cutting planes, roughened.
+ *
+ * Displacing a sphere radially gives a lumpy ball, and at boulder size a lumpy
+ * ball reads as a mound of earth however much noise goes into it. Rock breaks
+ * along planes, so the base shape here is a cut solid — the radius along a
+ * direction is the distance to the nearest plane facing that way — and the flat
+ * faces and hard edges that fall out of it are what make it read as basalt.
+ * The noise on top is only surface relief; the normal map carries the rest.
+ */
+function rockGeometry(detail, freq, seed, cuts = 11) {
+  const planes = [];
+  for (let i = 0; i < cuts; i++) {
+    // Spread over the sphere on a Fibonacci spiral, then jittered, so a rock
+    // gets cuts from all sides instead of a flat top and a round bottom.
+    const y = 1 - (2 * i + 1) / cuts;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const a = i * 2.399963 + hash(seed + i, 7.3) * 1.4;
+    planes.push({
+      x: Math.cos(a) * r,
+      y,
+      z: Math.sin(a) * r,
+      d: 0.6 + hash(seed * 1.7, i + 3) * 0.52,
+    });
+  }
+
+  const geo = new THREE.IcosahedronGeometry(1, detail);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    // Eleven cuts is where the spiral stops leaving directions uncovered; the
+    // ceiling only catches the corners a thinner set would leave spiking out.
+    let radius = 1.32;
+    for (const pl of planes) {
+      const facing = x * pl.x + y * pl.y + z * pl.z;
+      // Grazing planes are skipped: their support blows up and spikes the mesh.
+      if (facing > 0.16) radius = Math.min(radius, pl.d / facing);
+    }
+    const grain = fbm3(x * freq * 4 - seed, y * freq * 4 + 9, z * freq * 4 + seed, 2);
+    const s = radius * (0.94 + grain * 0.16);
+    p.setXYZ(i, x * s, y * s, z * s);
+  }
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
   return geo;
 }
 
@@ -372,42 +421,58 @@ export class World {
     this.plume = plume;
   }
 
-  _buildRocks(textures) {
-    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 2.2, 2.2);
-    const mat = standardFrom(pack, {
+  _rockMaterial(textures, repeat) {
+    return standardFrom(setRepeat(textures.pack("terrain_rock", { clone: true }), repeat, repeat), {
       roughness: 0.9,
       metalness: 0.03,
       emissive: new THREE.Color(0.4, 0.05, 0.01),
       emissiveIntensity: 0.2,
       envMapIntensity: 0.3,
     });
-    const geo = new THREE.IcosahedronGeometry(1, 1);
-    // Break the sphere so instances read as fractured basalt, not pebbles.
-    const p = geo.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const s = 0.78 + fbm(p.getX(i) * 2.2 + 11, p.getZ(i) * 2.2 + 7, 3) * 0.7;
-      p.setXYZ(i, p.getX(i) * s, p.getY(i) * s, p.getZ(i) * s);
-    }
-    geo.computeVertexNormals();
-    // The displaced hull, so the no-go circle can be sized to the lobes rather
-    // than to the mean surface: a boulder's longest spur is what the camera
-    // walks into, and it reaches about half again as far.
-    geo.computeBoundingSphere();
-    const hull = geo.boundingSphere.radius;
+  }
 
-    const spots = this._scatter(260, { minR: 18, maxR: 134, slopeMax: 2.4, clear: 16 });
-    this.rocks = this._instance(geo, mat, spots, (d, p) => {
-      d.position.set(p.x, p.y + 0.3, p.z);
-      d.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.4);
-      const s = 0.7 + Math.random() * 3.0;
-      d.scale.set(s * (0.7 + Math.random() * 0.6), s * (0.75 + Math.random() * 0.6), s * (0.7 + Math.random() * 0.6));
-      // Knee-high stones pass under the eye line and are better stepped over
-      // than walked around. The rest are blocked at their hull, less the body
-      // radius the resolver adds back, so the stop lands just off the rock.
-      return d.scale.y > 0.9 ? hull * Math.max(d.scale.x, d.scale.z) - 0.45 : 0;
+  /**
+   * Stone in two size classes.
+   *
+   * One geometry and one texture scale cannot serve both ends of the range. A
+   * five-metre boulder needs vertices to hold a broken silhouette and a tight
+   * texture repeat to keep any texel density at all — at the old settings the
+   * big ones read as smooth faceted slabs with the albedo smeared across
+   * metres. A knee-high stone needs neither, and giving it both would tile
+   * visibly and spend triangles on something nobody walks up to.
+   */
+  _buildRocks(textures) {
+    // Three throws of the cutting planes, because eighty instances of one block
+    // is a pattern the eye picks up across open ground however they are turned.
+    const boulderMat = this._rockMaterial(textures, 4.4);
+    this.boulders = [11, 57, 103].map((seed) => {
+      const geo = rockGeometry(5, 1.55, seed);
+      const spots = this._scatter(27, { minR: 20, maxR: 134, slopeMax: 2.2, clear: 20, spacing: 9 });
+      return this._instance(geo, boulderMat, spots, (d, p) => {
+        d.position.set(p.x, p.y + 0.2, p.z);
+        d.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
+        const s = 2.0 + Math.random() * 2.2;
+        d.scale.set(s * (0.8 + Math.random() * 0.4), s * (0.7 + Math.random() * 0.5), s * (0.8 + Math.random() * 0.4));
+        // Blocked at the hull, less the body radius the resolver adds back, so
+        // the hunter stops just off the rock rather than a stride away from it.
+        return geo.boundingSphere.radius * Math.max(d.scale.x, d.scale.z) - 0.45;
+      });
     });
 
-    this._buildScree(mat);
+    const stoneGeo = rockGeometry(3, 2.1, 41);
+    const stoneMat = this._rockMaterial(textures, 2.0);
+    const stones = this._scatter(190, { minR: 14, maxR: 134, slopeMax: 2.6, clear: 12 });
+    this.rocks = this._instance(stoneGeo, stoneMat, stones, (d, p) => {
+      d.position.set(p.x, p.y + 0.2, p.z);
+      d.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.6);
+      const s = 0.6 + Math.random() * 1.5;
+      d.scale.set(s * (0.7 + Math.random() * 0.6), s * (0.65 + Math.random() * 0.6), s * (0.7 + Math.random() * 0.6));
+      // Anything below the knee goes under the eye line and is better stepped
+      // over than walked around.
+      return d.scale.y > 0.9 ? stoneGeo.boundingSphere.radius * Math.max(d.scale.x, d.scale.z) - 0.45 : 0;
+    });
+
+    this._buildScree(stoneMat);
   }
 
   /**
@@ -420,13 +485,10 @@ export class World {
    * it is what breaks the silhouette, and the near field is where it counts.
    */
   _buildScree(mat) {
-    // Twenty faces, displaced into a chip. At this size nothing more resolves.
-    const geo = new THREE.IcosahedronGeometry(1, 0);
+    // Twenty faces, flattened into a chip. At this size nothing more resolves.
+    const geo = rockGeometry(0, 3.1, 29, 6);
     const p = geo.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const s = 0.6 + fbm(p.getX(i) * 3.1 + 29, p.getZ(i) * 3.1 - 13, 2);
-      p.setXYZ(i, p.getX(i) * s, p.getY(i) * s * 0.7, p.getZ(i) * s);
-    }
+    for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) * 0.7);
     geo.computeVertexNormals();
 
     const spots = this._scatter(900, { minR: 4, maxR: 124, slopeMax: 3.2, clear: 7 });
@@ -846,7 +908,7 @@ export class World {
     // Instanced props are one draw call each; it is their shadow pass that
     // costs, so thin the set gradually and drop shadow casting before geometry.
     const detail = tier === "low" ? 0 : tier === "medium" ? 1 : 2;
-    for (const prop of [this.rocks, this.spires, this.trees]) {
+    for (const prop of [...this.boulders, this.rocks, this.spires, this.trees]) {
       if (!prop) continue;
       prop.visible = true;
       prop.castShadow = detail >= 1;
