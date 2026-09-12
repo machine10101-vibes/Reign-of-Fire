@@ -16,6 +16,7 @@ export class Combat {
     this.mortars = [];
     this.clouds = [];
     this.waves = [];
+    this.flashes = [];
     this._muzzle = new THREE.Vector3();
     this._dir = new THREE.Vector3();
     this._hit = new THREE.Vector3();
@@ -134,6 +135,7 @@ export class Combat {
     this._updateMortars(dt, player);
     this._updateClouds(dt, player);
     this._updateWaves(dt, player);
+    this._updateFlashes(dt);
     this._breathDamage(dt, player);
   }
 
@@ -198,9 +200,12 @@ export class Combat {
   }
 
   _explode(pos, damage, player) {
-    this.particles.burst(this.particles.fire, pos, _v.set(0, 1, 0), 70, 16, 14);
-    this.particles.burst(this.particles.spark, pos, _v.set(0, 1, 0), 40, 12, 10);
-    this.particles.burst(this.particles.chips, pos, _v.set(0, 1, 0), 26, 10, 8);
+    // Weighted toward small debris: a handful of large fire splats near the
+    // camera reads as a few blurry circles rather than a blast.
+    this.particles.burst(this.particles.fire, pos, _v.set(0, 1, 0), 26, 13, 11);
+    this.particles.burst(this.particles.spark, pos, _v.set(0, 1, 0), 90, 22, 18);
+    this.particles.burst(this.particles.chips, pos, _v.set(0, 1, 0), 70, 16, 13);
+    this._flash(pos);
     this.audio.explode();
     const dist = pos.distanceTo(player.position);
     const radius = CONFIG.hunt.mortarRadius;
@@ -211,6 +216,26 @@ export class Combat {
       player.addShake(0.2 * falloff);
     } else if (dist < radius * 3) {
       player.addShake(0.06);
+    }
+  }
+
+  /** A short, bright point light does more for an impact than more particles. */
+  _flash(pos) {
+    const light = new THREE.PointLight(0xffb050, 260, 60, 2);
+    light.position.copy(pos);
+    this.scene.add(light);
+    this.flashes.push({ light, life: 0.35, max: 0.35 });
+  }
+
+  _updateFlashes(dt) {
+    for (let i = this.flashes.length - 1; i >= 0; i--) {
+      const f = this.flashes[i];
+      f.life -= dt;
+      f.light.intensity = 260 * Math.max(0, f.life / f.max) ** 2;
+      if (f.life <= 0) {
+        this.scene.remove(f.light);
+        this.flashes.splice(i, 1);
+      }
     }
   }
 

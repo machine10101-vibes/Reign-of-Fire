@@ -311,6 +311,7 @@ export class Dragon {
       hook.rotation.z = -Math.PI / 2.4;
       root.add(hook);
 
+      root.userData.side = side;
       this.bones.wings.push(root);
     }
   }
@@ -377,10 +378,11 @@ export class Dragon {
     const look = this.spec.look;
     const flapAmount = pose.flap ?? 1;
     const rate = this.flapRate * (pose.flapRate ?? 1);
-    const flap = Math.sin(this.anim * rate) * 0.46 * flapAmount;
+    const flap = Math.sin(this.anim * rate) * 0.5 * flapAmount;
     for (const w of this.bones.wings) {
-      w.rotation.z = flap - 0.06;
-      w.rotation.y = flap * 0.12;
+      // Wings extend along local Z, so they have to pivot about X to move at all.
+      w.rotation.x = (flap - 0.05) * w.userData.side;
+      w.rotation.y = flap * 0.1 * w.userData.side;
     }
 
     this.bones.neck.forEach((seg, i) => {
