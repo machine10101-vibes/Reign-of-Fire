@@ -319,13 +319,47 @@ export class World {
     }
     geo.computeVertexNormals();
 
-    const spots = this._scatter(130, { minR: 22, maxR: 132, slopeMax: 2.4, clear: 16 });
+    const spots = this._scatter(260, { minR: 18, maxR: 134, slopeMax: 2.4, clear: 16 });
     this.rocks = this._instance(geo, mat, spots, (d, p) => {
       d.position.set(p.x, p.y + 0.3, p.z);
       d.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.4);
-      const s = 0.9 + Math.random() * 2.6;
+      const s = 0.7 + Math.random() * 3.0;
       d.scale.set(s * (0.7 + Math.random() * 0.6), s * (0.75 + Math.random() * 0.6), s * (0.7 + Math.random() * 0.6));
     });
+
+    this._buildScree(mat);
+  }
+
+  /**
+   * Loose stone underfoot, in one instanced draw call.
+   *
+   * A height field cannot make ground read as fractured rock on its own: push
+   * enough noise into it to look broken up close and the macro shapes turn to
+   * gravel, so the interpolated surface stays smooth and the slope reads as a
+   * sand dune however much relief is layered in. Scattering actual stone over
+   * it is what breaks the silhouette, and the near field is where it counts.
+   */
+  _buildScree(mat) {
+    // Twenty faces, displaced into a chip. At this size nothing more resolves.
+    const geo = new THREE.IcosahedronGeometry(1, 0);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const s = 0.6 + fbm(p.getX(i) * 3.1 + 29, p.getZ(i) * 3.1 - 13, 2);
+      p.setXYZ(i, p.getX(i) * s, p.getY(i) * s * 0.7, p.getZ(i) * s);
+    }
+    geo.computeVertexNormals();
+
+    const spots = this._scatter(900, { minR: 4, maxR: 124, slopeMax: 3.2, clear: 7 });
+    this.scree = this._instance(geo, mat, spots, (d, p) => {
+      d.position.set(p.x, p.y + 0.05, p.z);
+      d.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      // Squared, so most of them are chips and only a few are bigger stones.
+      const s = 0.2 + Math.random() ** 2 * 0.85;
+      d.scale.set(s * (0.8 + Math.random() * 0.5), s * (0.5 + Math.random() * 0.5), s * (0.8 + Math.random() * 0.5));
+    });
+    // Nine hundred stone-sized shadow casters cost far more in the shadow pass
+    // than they are worth; the ambient occlusion in the pack reads well enough.
+    this.scree.castShadow = false;
   }
 
   _buildSpires(textures) {
@@ -725,6 +759,9 @@ export class World {
     }
     if (this.bones) this.bones.visible = detail >= 1;
     if (this.ruins) this.ruins.visible = detail >= 1;
+    // The scree is one draw call, but nine hundred stones still cost vertex
+    // work and overdraw, and the lowest tier needs the pixels more.
+    if (this.scree) this.scree.visible = detail >= 1;
     for (const c of this.ashColumns ?? []) c.visible = detail >= 1;
     this.lavaLights?.forEach((l, i) => {
       l.visible = tier === "cinematic" || (detail >= 2 && i === 0);

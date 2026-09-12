@@ -190,6 +190,27 @@ def save_gray(path: Path, arr: np.ndarray) -> None:
     _save(path, Image.fromarray(np.clip(arr * 255.0, 0, 255).astype(np.uint8), mode="L"))
 
 
+def wrap_seam(img: Image.Image, band: float = 0.16) -> Image.Image:
+    """Make an equirectangular plate wrap by fading a mirrored edge into itself.
+
+    The sky dome samples this image as a full panorama, so column zero sits
+    right next to the last column. The source plate is a framed 16:9 still
+    whose edges do not match at all -- near-black ash on one side, the
+    eruption glow on the other -- and the join read on the dome as a hard
+    vertical edge with a wedge of black sky beside it.
+
+    Mirroring the leading strip and ramping it over the trailing one forces the
+    last column to equal the first exactly, so the seam cannot be found.
+    """
+    a = np.asarray(img, dtype=np.float32)
+    width = a.shape[1]
+    strip_width = max(2, int(width * band))
+    mirrored = a[:, :strip_width][:, ::-1]
+    ramp = np.linspace(0.0, 1.0, strip_width, dtype=np.float32)[None, :, None]
+    a[:, width - strip_width :] = a[:, width - strip_width :] * (1.0 - ramp) + mirrored * ramp
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+
+
 def height_to_normal(height: np.ndarray, strength: float) -> np.ndarray:
     dy, dx = np.gradient(height)
     nx = -dx * strength
@@ -266,8 +287,10 @@ def main() -> None:
     if sky.exists():
         dest = OUT / "sky_ash_storm.webp"
         sky_img = Image.open(sky).convert("RGB")
-        sky_img = sky_img.resize((2048, 1152), Image.Resampling.LANCZOS)
-        _save(dest, sky_img)
+        # 2:1, because that is the aspect an equirectangular map is sampled at;
+        # the plate was being squeezed onto the dome at 16:9.
+        sky_img = sky_img.resize((2048, 1024), Image.Resampling.LANCZOS)
+        _save(dest, wrap_seam(sky_img))
         manifest.append({"source": sky.name, "stem": "sky", "maps": {"env": str(dest.relative_to(ROOT))}})
 
     title = SRC / "visual_target_fps.png"
