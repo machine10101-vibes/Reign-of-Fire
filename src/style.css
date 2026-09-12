@@ -154,6 +154,40 @@ h1 {
   border: 1px solid #fff6ee;
 }
 
+#bolts.empty {
+  color: #ff5a38;
+}
+
+#reload {
+  position: relative;
+  width: 180px;
+  height: 4px;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+
+#reload.active {
+  opacity: 1;
+}
+
+#reload i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #4a5a78, #d7c9a6);
+}
+
+#reload-label {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: #a8988a;
+}
+
 #top-left,
 #top-right {
   position: absolute;

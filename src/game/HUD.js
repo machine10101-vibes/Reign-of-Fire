@@ -15,6 +15,8 @@ export class HUD {
   constructor() {
     this.hp = document.getElementById("hp-fill");
     this.bolts = document.getElementById("bolts");
+    this.reload = document.getElementById("reload");
+    this.reloadFill = document.getElementById("reload-fill");
     this.beast = document.getElementById("beast-fill");
     this.beastPanel = document.getElementById("beast");
     this.beastName = document.getElementById("beast-name");
@@ -127,11 +129,20 @@ export class HUD {
       hot,
       hit,
       hitPart,
+      hitWeight,
       heat,
+      reloading,
+      reloadProgress,
     } = state;
 
     this.hp.style.width = `${Math.max(0, health)}%`;
     this.bolts.textContent = `${bolts} / ${maxBolts}`;
+    // Empty and reloading are the two states the dragons watch for — the AI
+    // presses the attack during both — so the hunter has to be able to see
+    // them too.
+    this.bolts.classList.toggle("empty", bolts === 0 && !reloading);
+    this.reload.classList.toggle("active", !!reloading);
+    if (reloading) this.reloadFill.style.width = `${Math.round(reloadProgress * 100)}%`;
     this.fps.textContent = `${Math.round(fps)} FPS`;
     this.quality.textContent = quality;
     this.bounty.textContent = `${bounty} gold`;
@@ -140,6 +151,9 @@ export class HUD {
     this.cross.classList.toggle("crit", hitPart === "head");
     this.heat.style.opacity = heat ? "1" : "0";
     this.hit.style.opacity = hit ? "1" : "0";
+    // Armour varies enormously across the roster, so how much a hit actually
+    // took off is worth telling apart from the fact that it landed.
+    if (hit) this.hit.style.transform = `translate(-50%, -50%) scale(${(0.8 + hitWeight * 0.7).toFixed(2)})`;
 
     if (logDirty) this._renderLog(log);
     this._renderThreats(alive, playerPos);
