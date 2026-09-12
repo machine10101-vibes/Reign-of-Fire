@@ -10,8 +10,8 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "public" / "assets" / "models"
-ANIM = ROOT / "public" / "assets" / "animations"
+OUT = ROOT / "art" / "models"
+ANIM = ROOT / "art" / "animations"
 
 
 def write_obj(path: Path, vertices: np.ndarray, faces: np.ndarray, uvs: np.ndarray, normals: np.ndarray, name: str) -> None:
