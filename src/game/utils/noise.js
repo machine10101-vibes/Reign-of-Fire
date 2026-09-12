@@ -76,3 +76,28 @@ export function fbm3(x, y, z, octaves = 4) {
 export function ridge(x, z) {
   return 1 - Math.abs(fbm(x * 0.55, z * 0.55, 4) * 2 - 1);
 }
+
+/**
+ * Ridged multifractal: mountains rather than dunes.
+ *
+ * Plain fbm is rolling by construction — every octave is as likely to be a
+ * mound as a hollow — so a landscape shaped with it reads as sand at any scale
+ * however many octaves go in. Folding each octave about its midpoint turns the
+ * mounds into crests with V-shaped ground between them, and weighting each
+ * octave by the one above concentrates the fine detail on the crests, which is
+ * what erosion does.
+ */
+export function ridged(x, z, octaves = 5, lacunarity = 2.07, gain = 0.5) {
+  let v = 0;
+  let a = 0.5;
+  let f = 1;
+  let w = 1;
+  for (let i = 0; i < octaves; i++) {
+    const n = (1 - Math.abs(noise2(x * f, z * f) * 2 - 1)) ** 2;
+    v += a * n * w;
+    w = Math.min(1, n * 2.2);
+    f *= lacunarity;
+    a *= gain;
+  }
+  return v;
+}

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { CONFIG } from "./config.js";
-import { fbm, fbm3, hash, ridge, noise2 } from "./utils/noise.js";
+import { fbm, fbm3, hash, ridge, ridged, noise2 } from "./utils/noise.js";
 import { standardFrom, setRepeat } from "./assets.js";
 
 const SPAWN = new THREE.Vector2(2, 46);
@@ -30,6 +30,31 @@ function weathered(geo, amount, seed) {
   }
   geo.computeVertexNormals();
   return geo;
+}
+
+/**
+ * The shape of the place: eighty-metre swells, the ridge system, and the
+ * twenty-metre benches cut into it.
+ *
+ * The massif is ridged rather than rolling. An fbm landscape is dunes at every
+ * scale however many octaves go into it, which is exactly how this ridge used
+ * to read; folding each octave about its midpoint gives crests with gullies
+ * between them instead.
+ */
+function terrainMacro(x, z) {
+  const swell = fbm(x * 0.0125, z * 0.0125, 3);
+  const massif = ridged(x * 0.0115 + 3.1, z * 0.0115 - 5.2, 6);
+  const benches = ridged(x * 0.055 - 7.4, z * 0.055 + 2.8, 3) * 4.6;
+  const caldera = Math.exp(-((Math.hypot(x, z + 18) - 42) ** 2) / 380) * 3.2;
+  return swell * 10 + massif * 28 + benches - caldera - 3.2;
+}
+
+/**
+ * Relief in the six-metre and two-metre bands, kept separate so it can survive
+ * the camp shelf: a perfectly flat disc of ground reads as a construction site.
+ */
+function terrainDetail(x, z) {
+  return ridge(x * 0.17, z * 0.163) ** 2 * 2.7 + fbm(x * 0.46, z * 0.46, 2) * 1.15;
 }
 
 /**
@@ -299,29 +324,26 @@ export class World {
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
     const uvs = geo.attributes.uv;
+    // The camp needs a shelf. It is where the hunter spawns and the one place
+    // on the ridge the fiction says somebody chose, and dropped into a gully it
+    // has nothing to look out over.
+    const campY = terrainMacro(SPAWN.x, SPAWN.y);
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      const mountain = fbm(x * 0.018, z * 0.018, 5);
-      const ridges = ridge(x * 0.021, z * 0.02);
-      // Broken relief in the three-to-ten metre band. The massif noise bottoms
-      // out around twenty metres, so without this the height field runs
-      // straight from those shapes down to the quad size and the smooth
-      // interpolation across the gap reads as sand dunes — which is exactly
-      // what it looked like, and no amount of normal mapping hides it.
-      const fracture = ridge(x * 0.17, z * 0.163) ** 2 * 2.7;
-      const rubble = fbm(x * 0.46, z * 0.46, 2) * 1.15;
-      const crater = Math.hypot(x, z + 18);
-      const caldera = Math.exp(-((crater - 42) ** 2) / 380) * 3.2;
-      const h = mountain * 16.5 + ridges * 11.5 + fracture + rubble - caldera + 1.4;
+      const shelf = THREE.MathUtils.smoothstep(Math.hypot(x - SPAWN.x, z - SPAWN.y), 11, 32);
+      const h = THREE.MathUtils.lerp(campY, terrainMacro(x, z), shelf) + terrainDetail(x, z);
       pos.setY(i, h);
       const ix = Math.round(((x + this.size / 2) / this.size) * n);
       const iz = Math.round(((z + this.size / 2) / this.size) * n);
       this.heights[iz * (n + 1) + ix] = h;
       uvs.setXY(i, x * 0.045, z * 0.045);
       // Ash bleaches the peaks; the low ground keeps its molten tint.
-      const lava = THREE.MathUtils.smoothstep(5.4, 2.2, h);
-      const ash = THREE.MathUtils.smoothstep(16, 26, h);
+      // Tuned to where the ground actually sits: the low ground now bottoms out
+      // around five metres and the crests reach thirty, so the old thresholds
+      // would have put the molten tint nowhere and the ash halfway down.
+      const lava = THREE.MathUtils.smoothstep(8.5, 3.5, h);
+      const ash = THREE.MathUtils.smoothstep(18, 29, h);
       colors[i * 3] = 1 - ash * 0.1;
       colors[i * 3 + 1] = 1 - lava * 0.55 - ash * 0.04;
       colors[i * 3 + 2] = 1 - lava * 0.7 - ash * 0.02;
@@ -370,7 +392,7 @@ export class World {
           // out-radiates the rock albedo and the ground goes to smooth putty.
           `#include <emissivemap_fragment>
            float crack = texture2D(emissiveMap, vEmissiveMapUv * 4.0).r;
-           float lava = 1.0 - smoothstep(2.4, 6.8, vWorldY);
+           float lava = 1.0 - smoothstep(4.0, 11.0, vWorldY);
            float pulse = 0.65 + 0.35 * sin(uTime * 1.7 + vWorldY * 0.4);
            totalEmissiveRadiance += vec3(1.0, 0.22, 0.04) * crack * lava * pulse * 2.2;`
         );
