@@ -132,13 +132,20 @@ export class DragonAI {
    * breaking sideways a real answer rather than a superstition.
    */
   _aimBreath(dt, ctx) {
-    if (!this.breath.active || !ctx?.playerPos) {
+    if (!ctx?.playerPos || this.state === DragonState.DEAD) {
       this.dragon.headForward(this.breath.aim);
       return;
     }
     _v.subVectors(ctx.playerPos, this.dragon.mouthWorld(_mouth));
     if (_v.lengthSq() < 1e-6) return;
-    this.breath.aim.lerp(_v.normalize(), 1 - Math.exp(-dt * this.stats.turnRate * 0.7)).normalize();
+    // Tracked between bursts as well as during them. The hover barrage and the
+    // venom spray strobe the flame on and off every three quarters of a
+    // second, and restarting the sweep from the head's facing each time left
+    // those species spraying past the hunter for a whole attack: a Sulfurmaw
+    // could breathe for a third of the fight and land almost nothing. It
+    // re-acquires faster than it sweeps, so dodging a lit flame still works.
+    const rate = this.stats.turnRate * (this.breath.active ? 0.7 : 1.4);
+    this.breath.aim.lerp(_v.normalize(), 1 - Math.exp(-dt * rate)).normalize();
   }
 
   /** Where the flame is actually pointing, in world space. */
