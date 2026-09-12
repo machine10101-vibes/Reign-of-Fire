@@ -441,7 +441,8 @@ export class World {
       this.group.add(pool);
       this.props.push(pool);
 
-      if (i < 5) {
+      // Point lights are the most expensive thing here, so only a few pools get one.
+      if (i < 3) {
         const light = new THREE.PointLight(0xff4a10, 30, radius * 6, 1.8);
         light.position.set(p.x, p.y + 2.2, p.z);
         this.group.add(light);
@@ -511,6 +512,13 @@ export class World {
     fire.add(this.campFire);
     camp.add(fire);
     this.campGroup = camp;
+    this.campCenter = new THREE.Vector3(SPAWN.x + 1.6, ground, SPAWN.y + 1.4);
+    this.campRadius = 8.5;
+  }
+
+  /** True inside the staked ring, where the hunter can bind wounds. */
+  atCamp(position) {
+    return Math.hypot(position.x - this.campCenter.x, position.z - this.campCenter.z) < this.campRadius;
   }
 
   _buildLighting() {
@@ -524,7 +532,7 @@ export class World {
     this.sun = new THREE.DirectionalLight(0xffa561, 2.5);
     this.sun.position.set(-78, 40, 34);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(1536, 1536);
     this.sun.shadow.camera.near = 4;
     this.sun.shadow.camera.far = 300;
     this.sun.shadow.camera.left = -110;
@@ -587,13 +595,21 @@ export class World {
     this.sun.shadow.map = null;
     this.sun.castShadow = tier !== "low";
 
+    // Instanced props are one draw call each; it is their shadow pass that
+    // costs, so thin the set gradually and drop shadow casting before geometry.
     const detail = tier === "low" ? 0 : tier === "medium" ? 1 : 2;
-    if (this.rocks) this.rocks.visible = detail >= 1;
-    if (this.spires) this.spires.visible = detail >= 1;
-    if (this.trees) this.trees.visible = detail >= 1;
-    if (this.bones) this.bones.visible = detail >= 2;
-    if (this.ruins) this.ruins.visible = detail >= 2;
+    for (const prop of [this.rocks, this.spires, this.trees]) {
+      if (!prop) continue;
+      prop.visible = true;
+      prop.castShadow = detail >= 1;
+    }
+    if (this.bones) this.bones.visible = detail >= 1;
+    if (this.ruins) this.ruins.visible = detail >= 1;
     for (const c of this.ashColumns ?? []) c.visible = detail >= 1;
-    for (const l of this.lavaLights ?? []) l.visible = detail >= 2;
+    this.lavaLights?.forEach((l, i) => {
+      l.visible = tier === "cinematic" || (detail >= 2 && i === 0);
+    });
+    if (this.campFire) this.campFire.visible = detail >= 1;
+    if (this.ember) this.ember.visible = detail >= 1;
   }
 }

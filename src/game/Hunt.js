@@ -42,10 +42,17 @@ export class Hunt {
     return this.entries.filter((e) => e.dragon.alive);
   }
 
+  /** Rebuilt only when the roster changes; this list is walked twice a frame. */
   get hitboxes() {
+    if (this._boxes) return this._boxes;
     const out = [];
     for (const e of this.entries) if (e.dragon.alive) out.push(...e.dragon.hitboxes);
+    this._boxes = out;
     return out;
+  }
+
+  _invalidate() {
+    this._boxes = null;
   }
 
   /** The beast the HUD should describe: whoever is actually committed, else nearest. */
@@ -105,6 +112,14 @@ export class Hunt {
     this.scene.add(dragon.root);
     const ai = new DragonAI(dragon, this.world, home);
     this.entries.push({ dragon, ai, spec, scored: false });
+    if (dragon.glow && this.quality === "low") dragon.glow.visible = false;
+    this._invalidate();
+  }
+
+  /** A glow light per beast adds up fast, so drop them on weaker hardware. */
+  setQuality(tier) {
+    this.quality = tier;
+    for (const e of this.entries) if (e.dragon.glow) e.dragon.glow.visible = tier !== "low";
   }
 
   pushLog(text, kind = "info") {
@@ -145,6 +160,7 @@ export class Hunt {
         this.kills.push(e.spec.id);
         this.pushLog(`${e.spec.name} down · +${e.spec.bounty}g`, "kill");
         this.audio.death();
+        this._invalidate();
       }
     }
 
@@ -168,6 +184,7 @@ export class Hunt {
         this.scene.remove(e.dragon.root);
         e.dragon.dispose();
         this.entries.splice(i, 1);
+        this._invalidate();
       }
     }
   }
