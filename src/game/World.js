@@ -167,7 +167,9 @@ export class World {
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
 
-    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 16, 16);
+    // Roughly one tile every six metres: dense enough to read as scoria, coarse
+    // enough that the macro shapes survive mipmapping out to the ridge line.
+    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 4, 4);
     const mat = standardFrom(pack, {
       vertexColors: true,
       metalness: 0.04,
@@ -202,10 +204,13 @@ export class World {
         )
         .replace(
           "#include <emissivemap_fragment>",
+          // Gated on the crack mask: a flat glow over every low-lying face
+          // out-radiates the rock albedo and the ground goes to smooth putty.
           `#include <emissivemap_fragment>
+           float crack = texture2D(emissiveMap, vEmissiveMapUv * 4.0).r;
            float lava = 1.0 - smoothstep(2.4, 6.8, vWorldY);
            float pulse = 0.65 + 0.35 * sin(uTime * 1.7 + vWorldY * 0.4);
-           totalEmissiveRadiance += vec3(1.0, 0.22, 0.04) * lava * pulse * 0.55;`
+           totalEmissiveRadiance += vec3(1.0, 0.22, 0.04) * crack * lava * pulse * 2.2;`
         );
     };
 
