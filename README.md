@@ -2,7 +2,14 @@
 
 First-person dragon hunt on Caldera Ridge. WebGL vertical slice targeting Unreal-style grit: volcanic terrain, a fully animated Ashwrought, and the Ashpiercer ballista.
 
-## Play
+## Play live
+
+**Hunt:** https://machine10101-vibes.github.io/Reign-of-Fire/  
+**Cinematic autoplay:** https://machine10101-vibes.github.io/Reign-of-Fire/?autoplay=1
+
+GitHub Pages deploys from `main` via `.github/workflows/deploy-pages.yml`.
+
+## Play locally
 
 ```bash
 npm install

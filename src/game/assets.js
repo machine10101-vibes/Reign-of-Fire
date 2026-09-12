@@ -33,7 +33,7 @@ export async function loadTextures() {
       const pack = {};
       await Promise.all(
         MAPS.map(async (map) => {
-          const tex = await load(`/assets/textures/pbr/${stem}_${map}.png`);
+          const tex = await load(`${import.meta.env.BASE_URL}assets/textures/pbr/${stem}_${map}.png`);
           configure(tex, { srgb: map === "albedo" || map === "emissive", repeat: 1 });
           pack[map] = tex;
         })
@@ -42,7 +42,7 @@ export async function loadTextures() {
     })
   );
 
-  library.sky = configure(await load("/assets/textures/pbr/sky_ash_storm.png"), {
+  library.sky = configure(await load(`${import.meta.env.BASE_URL}assets/textures/pbr/sky_ash_storm.png`), {
     srgb: true,
     repeat: 1,
   });
