@@ -1,0 +1,49 @@
+{
+  "name": "ashwrought",
+  "fps": 30,
+  "skeleton": [
+    "root",
+    "chest",
+    "neck_a",
+    "neck_b",
+    "head",
+    "jaw",
+    "tail_a",
+    "tail_b",
+    "tail_c",
+    "wing_l_upper",
+    "wing_l_lower",
+    "wing_r_upper",
+    "wing_r_lower"
+  ],
+  "clips": {
+    "fly": {
+      "duration": 1.6,
+      "loop": true,
+      "channels": {
+        "wing_l_upper.z": "sin",
+        "wing_r_upper.z": "-sin"
+      }
+    },
+    "dive": {
+      "duration": 0.8,
+      "loop": false,
+      "rootPitch": -0.55
+    },
+    "breathe": {
+      "duration": 1.4,
+      "loop": false,
+      "jawOpen": 0.7
+    },
+    "pain": {
+      "duration": 0.5,
+      "loop": false,
+      "recoil": 0.35
+    },
+    "death": {
+      "duration": 2.4,
+      "loop": false,
+      "rootPitch": 1.1
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "reign-of-fire",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reign of Fire — first-person dragon hunting vertical slice",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "pipeline:pbr": "python3 pipeline/generate_pbr.py",
+    "pipeline:models": "python3 pipeline/export_models.py",
+    "pipeline:blender": "python3 pipeline/blender_scene.py",
+    "pipeline": "python3 pipeline/generate_pbr.py && python3 pipeline/export_models.py && python3 pipeline/blender_scene.py",
+    "test": "node scripts/validate.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.3"
+  }
+}
