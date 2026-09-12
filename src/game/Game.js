@@ -79,7 +79,8 @@ export class Game {
       else this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
     });
 
-    await this.hunt.begin();
+    const flight = Number(new URLSearchParams(location.search).get("flight"));
+    await this.hunt.begin(Number.isFinite(flight) ? flight - 1 : 0);
     // The rest of the roster streams in behind the first flight.
     this.textures.prefetch(LAZY_PACKS);
 

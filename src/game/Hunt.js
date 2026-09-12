@@ -72,7 +72,9 @@ export class Hunt {
     return best;
   }
 
-  async begin() {
+  /** `startIndex` lets a demo or a debug session open on a later flight. */
+  async begin(startIndex = 0) {
+    this.flightIndex = Math.max(0, Math.min(startIndex, this.flights.length - 1)) - 1;
     await this.nextFlight();
   }
 
