@@ -1,7 +1,7 @@
 export const CONFIG = {
   title: "Reign of Fire",
   worldSize: 280,
-  terrainSegments: 112,
+  terrainSegments: 128,
   player: {
     eye: 1.72,
     speed: 7.4,
@@ -21,21 +21,27 @@ export const CONFIG = {
     recoil: 0.034,
     cooldown: 0.62,
     mass: 0.42,
+    damage: 85,
   },
-  dragon: {
-    hp: 1100,
-    patrolRadius: 22,
-    patrolHeight: 36,
-    flySpeed: 22,
-    diveSpeed: 38,
-    spotRange: 140,
-    breathRange: 42,
-    breathDamage: 18,
-    bodyScale: 8.2,
+  hunt: {
+    // Difficulty ramps by aggression and armour, not just by hit points.
+    flights: [
+      { label: "Scavengers on the slope", species: ["emberkin", "emberkin"] },
+      { label: "Forge-hot harrier", species: ["cinderwyrm"] },
+      { label: "The ridge's landlord", species: ["ashwrought"] },
+      { label: "Fumarole brood", species: ["sulfurmaw", "emberkin"] },
+      { label: "Something is stalking you", species: ["pale_stalker"] },
+      { label: "Walking siege", species: ["basalt_tyrant", "cinderwyrm"] },
+    ],
+    flightGap: 6,
+    corpseLinger: 9,
+    mortarRadius: 9,
+    cloudLife: 7,
+    cloudRadius: 7,
   },
   quality: {
     targetFps: 60,
-    particleAsh: 700,
-    particleEmber: 180,
+    particleAsh: 900,
+    particleEmber: 220,
   },
 };

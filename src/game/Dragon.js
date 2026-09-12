@@ -1,50 +1,114 @@
 import * as THREE from "three";
-import { CONFIG } from "./config.js";
-import { standardFrom } from "./assets.js";
+import { standardFrom, setRepeat } from "./assets.js";
 
-function boneMesh(geo, mat, cast = true) {
+/** Torso profile as [distance along spine, radius]; revolved into a lathe. */
+const TORSO_PROFILE = [
+  [-1.8, 0.05],
+  [-1.52, 0.26],
+  [-1.05, 0.52],
+  [-0.45, 0.8],
+  [0.12, 0.95],
+  [0.6, 0.9],
+  [1.0, 0.7],
+  [1.26, 0.44],
+  [1.42, 0.22],
+];
+
+const _q = new THREE.Quaternion();
+
+function limbMesh(geo, mat) {
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = cast;
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
 }
 
+function torsoGeometry(segments) {
+  const points = TORSO_PROFILE.map(([along, r]) => new THREE.Vector2(r, along));
+  const geo = new THREE.LatheGeometry(points, segments);
+  geo.rotateZ(-Math.PI / 2);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Membrane outline in shape space: +X spans outboard, +Y runs toward the
+ * leading edge. The scalloped trailing edge is what reads as "bat wing"
+ * rather than "flat triangle" in silhouette.
+ */
+function membraneGeometry(span) {
+  const s = span;
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.quadraticCurveTo(1.6 * s, 0.55, 3.1 * s, 0.36);
+  shape.quadraticCurveTo(4.0 * s, 0.22, 4.35 * s, -0.24);
+  shape.quadraticCurveTo(3.5 * s, -0.8, 2.7 * s, -1.2);
+  shape.quadraticCurveTo(2.1 * s, -0.82, 1.55 * s, -1.3);
+  shape.quadraticCurveTo(1.05 * s, -0.9, 0.5 * s, -0.98);
+  shape.quadraticCurveTo(0.2 * s, -0.5, 0, 0);
+  const geo = new THREE.ShapeGeometry(shape, 16);
+  geo.applyMatrix4(
+    new THREE.Matrix4().makeBasis(
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(0, 1, 0)
+    )
+  );
+  return geo;
+}
+
 export class Dragon {
-  constructor(textures) {
-    this.maxHp = CONFIG.dragon.hp;
+  constructor(spec, textures) {
+    this.spec = spec;
+    this.species = spec.id;
+    this.name = spec.name;
+    this.maxHp = spec.stats.hp;
     this.hp = this.maxHp;
+    this.armor = spec.stats.armor ?? 0;
     this.alive = true;
     this.root = new THREE.Group();
-    this.root.scale.setScalar(CONFIG.dragon.bodyScale);
+    this.root.scale.setScalar(spec.build.scale);
     this.bones = {};
     this.hitboxes = [];
-    this.anim = 0;
+    this.anim = Math.random() * 10;
     this.pain = 0;
     this.jaw = 0;
+    this.flapRate = THREE.MathUtils.lerp(2.2, 5.4, 1 - spec.build.scale / 14);
     this._build(textures);
   }
 
   _mat(textures) {
-    const body = standardFrom(textures.dragon_scales, {
-      metalness: 0.22,
-      roughness: 0.42,
-      emissive: new THREE.Color(1.15, 0.18, 0.03),
-      emissiveIntensity: 2.4,
-      normalScale: new THREE.Vector2(1.6, 1.6),
+    const look = this.spec.look;
+    const scales = setRepeat(textures.pack(look.pack, { clone: true }), ...look.scaleRepeat);
+    const body = standardFrom(scales, {
+      metalness: look.metalness,
+      roughness: look.roughness,
+      emissive: new THREE.Color(...look.emissive),
+      emissiveIntensity: look.emissiveBase,
+      normalScale: new THREE.Vector2(1.7, 1.7),
+      envMapIntensity: 0.5,
     });
-    textures.dragon_scales.albedo.repeat.set(3.5, 2.2);
-    textures.dragon_scales.normal.repeat.set(3.5, 2.2);
-    textures.dragon_scales.emissive.repeat.set(3.5, 2.2);
-    textures.dragon_wing.albedo.repeat.set(2.4, 2.4);
-    const wing = standardFrom(textures.dragon_wing, {
-      metalness: 0.06,
-      roughness: 0.55,
-      emissive: new THREE.Color(0.8, 0.08, 0.02),
-      emissiveIntensity: 0.85,
+
+    const wingPack = setRepeat(textures.pack("dragon_wing", { clone: true }), 0.55, 0.55);
+    const wing = standardFrom(wingPack, {
+      color: new THREE.Color(look.wingTint),
+      metalness: 0.04,
+      roughness: THREE.MathUtils.clamp(look.roughness + 0.15, 0, 1),
+      emissive: new THREE.Color(...look.emissive).multiplyScalar(0.55),
+      emissiveIntensity: look.emissiveBase * 0.3,
       side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.94,
     });
-    this.materials = { body, wing };
-    return { body, wing };
+
+    const claw = new THREE.MeshStandardMaterial({
+      color: 0x14100d,
+      metalness: 0.3,
+      roughness: 0.35,
+    });
+
+    this.materials = { body, wing, claw };
+    return this.materials;
   }
 
   _addHit(name, mesh, multiplier) {
@@ -53,141 +117,229 @@ export class Dragon {
   }
 
   _build(textures) {
-    const { body, wing } = this._mat(textures);
+    const { build } = this.spec;
+    const { body, wing, claw } = this._mat(textures);
+    const girth = build.bodyGirth;
+    const detail = build.scale > 9 ? 20 : 16;
 
     const chest = new THREE.Group();
-    chest.add(boneMesh(new THREE.SphereGeometry(0.95, 18, 14), body));
-    const torso = boneMesh(new THREE.CylinderGeometry(0.72, 0.95, 2.4, 14), body);
-    torso.rotation.z = Math.PI / 2;
-    torso.position.x = -1.15;
+    const torso = limbMesh(torsoGeometry(detail), body);
+    torso.scale.set(1, girth, girth * 0.94);
     chest.add(torso);
     this.root.add(chest);
     this.bones.chest = chest;
-    this._addHit("body", chest.children[0], 1);
+    this._addHit("body", torso, 1);
 
-    const neckA = new THREE.Group();
-    neckA.position.set(0.85, 0.15, 0);
-    neckA.add(boneMesh(new THREE.CylinderGeometry(0.38, 0.55, 1.15, 12), body));
-    neckA.children[0].rotation.z = Math.PI / 2;
-    neckA.children[0].position.x = 0.5;
-    chest.add(neckA);
-    this.bones.neckA = neckA;
+    this._buildSpine(chest, body, build, girth);
+    this._buildNeck(chest, body, claw, build);
+    this._buildTail(chest, body, build, girth);
+    this._buildWings(chest, body, wing, claw, build);
+    this._buildLegs(chest, body, claw, girth);
 
-    const neckB = new THREE.Group();
-    neckB.position.set(1.1, 0.08, 0);
-    neckB.add(boneMesh(new THREE.CylinderGeometry(0.28, 0.4, 1.0, 12), body));
-    neckB.children[0].rotation.z = Math.PI / 2;
-    neckB.children[0].position.x = 0.45;
-    neckA.add(neckB);
-    this.bones.neckB = neckB;
+    this.root.rotation.y = -Math.PI / 2;
+    this.glow = new THREE.PointLight(this.spec.look.glow, this.spec.look.glowIntensity, 52, 1.5);
+    this.glow.position.set(0.6, 0, 0);
+    this.root.add(this.glow);
+  }
+
+  _buildSpine(chest, body, build, girth) {
+    if (!build.spikes) return;
+    for (let i = 0; i < 7; i++) {
+      const t = i / 6;
+      const height = 0.18 + Math.sin(t * Math.PI) * 0.3;
+      const spike = limbMesh(new THREE.ConeGeometry(0.06, height, 5), body);
+      spike.position.set(0.9 - t * 2.5, (0.88 - t * 0.15) * girth, 0);
+      spike.rotation.z = -0.25;
+      chest.add(spike);
+    }
+  }
+
+  _buildNeck(chest, body, claw, build) {
+    const segments = build.neck > 1.2 ? 3 : 2;
+    const segLength = (1.1 * build.neck) / (segments / 2);
+    let parent = chest;
+    this.bones.neck = [];
+    for (let i = 0; i < segments; i++) {
+      const g = new THREE.Group();
+      g.position.set(i === 0 ? 1.05 : segLength * 0.88, i === 0 ? 0.22 : 0.06, 0);
+      const rTop = 0.46 - i * 0.09;
+      const rBottom = 0.56 - i * 0.09;
+      const seg = limbMesh(new THREE.CylinderGeometry(rTop, rBottom, segLength, 12), body);
+      seg.rotation.z = Math.PI / 2;
+      seg.position.x = segLength * 0.44;
+      g.add(seg);
+      parent.add(g);
+      this.bones.neck.push(g);
+      this._addHit("neck", seg, 1.6);
+      parent = g;
+    }
 
     const head = new THREE.Group();
-    head.position.set(1.05, 0.05, 0);
-    const skull = boneMesh(new THREE.SphereGeometry(0.42, 14, 12), body);
-    skull.scale.set(1.45, 0.85, 0.78);
+    head.position.set(segLength * 0.9, 0.04, 0);
+    head.scale.setScalar(build.headSize);
+    const skull = limbMesh(new THREE.SphereGeometry(0.42, 16, 12), body);
+    skull.scale.set(1.5, 0.86, 0.8);
     head.add(skull);
-    const snout = boneMesh(new THREE.ConeGeometry(0.22, 0.7, 10), body);
-    snout.rotation.z = -Math.PI / 2;
-    snout.position.x = 0.62;
-    head.add(snout);
-    this.jawBone = new THREE.Group();
-    this.jawBone.position.set(0.2, -0.12, 0);
-    const jawMesh = boneMesh(new THREE.BoxGeometry(0.7, 0.12, 0.34), body);
-    jawMesh.position.x = 0.35;
-    this.jawBone.add(jawMesh);
-    head.add(this.jawBone);
-    for (const side of [-1, 1]) {
-      const horn = boneMesh(new THREE.ConeGeometry(0.07, 0.7, 6), body);
-      horn.position.set(-0.05, 0.38, 0.16 * side);
-      horn.rotation.z = 0.45;
-      head.add(horn);
-      const eye = new THREE.Mesh(
-        new THREE.SphereGeometry(0.07, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xff2a00 })
-      );
-      eye.position.set(0.28, 0.12, 0.22 * side);
-      head.add(eye);
-    }
-    neckB.add(head);
-    this.bones.head = head;
-    this._addHit("head", skull, 3.0);
-    this.mouth = new THREE.Object3D();
-    this.mouth.position.set(0.85, -0.02, 0);
-    head.add(this.mouth);
 
-    let tailParent = chest;
-    let tPos = -1.9;
+    const brow = limbMesh(new THREE.BoxGeometry(0.34, 0.09, 0.52), body);
+    brow.position.set(0.2, 0.2, 0);
+    brow.rotation.z = -0.12;
+    head.add(brow);
+
+    const snout = limbMesh(new THREE.ConeGeometry(0.24, 0.76, 12), body);
+    snout.rotation.z = -Math.PI / 2;
+    snout.position.x = 0.64;
+    head.add(snout);
+
+    this.jawBone = new THREE.Group();
+    this.jawBone.position.set(0.18, -0.14, 0);
+    const jaw = limbMesh(new THREE.CylinderGeometry(0.1, 0.19, 0.72, 8), body);
+    jaw.rotation.z = Math.PI / 2;
+    jaw.position.x = 0.36;
+    jaw.scale.y = 0.55;
+    this.jawBone.add(jaw);
+    for (let i = 0; i < 4; i++) {
+      for (const side of [-1, 1]) {
+        const tooth = limbMesh(new THREE.ConeGeometry(0.028, 0.13, 4), claw);
+        tooth.position.set(0.24 + i * 0.15, 0.07, 0.1 * side);
+        this.jawBone.add(tooth);
+      }
+    }
+    this.bones.head = head;
+    this.bones.neck[this.bones.neck.length - 1].add(head);
+    head.add(this.jawBone);
+    this._addHit("head", skull, 3.0);
+
+    const pairs = Math.max(1, Math.round(build.horns / 2));
+    for (let p = 0; p < pairs; p++) {
+      const back = p / Math.max(1, pairs);
+      for (const side of [-1, 1]) {
+        const horn = limbMesh(new THREE.ConeGeometry(0.075 - p * 0.012, build.hornLength * (1 - back * 0.35), 6), claw);
+        horn.position.set(-0.04 - back * 0.22, 0.34 - back * 0.08, (0.14 + back * 0.12) * side);
+        horn.rotation.set(-0.35 * side, 0, 0.5 + back * 0.25);
+        head.add(horn);
+      }
+    }
+
+    this.eyes = [];
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 10, 10),
+        new THREE.MeshBasicMaterial({ color: this.spec.look.eye })
+      );
+      eye.position.set(0.3, 0.13, 0.23 * side);
+      head.add(eye);
+      this.eyes.push(eye);
+    }
+
+    this.mouth = new THREE.Object3D();
+    this.mouth.position.set(0.95, -0.04, 0);
+    head.add(this.mouth);
+  }
+
+  _buildTail(chest, body, build, girth) {
+    const count = build.tailSegments;
+    let parent = chest;
+    let x = -1.7;
     this.bones.tail = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < count; i++) {
+      const t = i / count;
       const g = new THREE.Group();
-      g.position.set(tPos, -0.05 * i, 0);
-      const r = 0.55 - i * 0.09;
-      const seg = boneMesh(new THREE.CylinderGeometry(r * 0.65, r, 1.05, 10), body);
+      g.position.set(x, -0.04 * i, 0);
+      const r = (0.5 - t * 0.38) * girth;
+      const seg = limbMesh(new THREE.CylinderGeometry(r * 0.7, r, 1.05, 10), body);
       seg.rotation.z = Math.PI / 2;
-      seg.position.x = -0.45;
+      seg.position.x = -0.46;
       g.add(seg);
-      const spike = boneMesh(new THREE.ConeGeometry(0.08, 0.35, 5), body);
-      spike.position.set(-0.2, 0.42, 0);
-      g.add(spike);
-      tailParent.add(g);
+      if (build.spikes) {
+        const spike = limbMesh(new THREE.ConeGeometry(0.07, 0.34, 5), body);
+        spike.position.set(-0.24, r + 0.1, 0);
+        g.add(spike);
+      }
+      parent.add(g);
       this.bones.tail.push(g);
       this._addHit("tail", seg, 0.7);
-      tailParent = g;
-      tPos = -0.95;
+      parent = g;
+      x = -0.95;
     }
+    const barb = limbMesh(new THREE.ConeGeometry(0.16, 0.72, 6), this.materials.claw);
+    barb.rotation.z = -Math.PI / 2;
+    barb.position.set(-1.1, 0, 0);
+    parent.add(barb);
+  }
 
+  _buildWings(chest, body, wing, claw, build) {
+    const span = build.wingSpan;
     this.bones.wings = [];
     for (const side of [-1, 1]) {
-      const wingRoot = new THREE.Group();
-      wingRoot.position.set(0.15, 0.4, 0.62 * side);
-      chest.add(wingRoot);
+      const root = new THREE.Group();
+      root.position.set(0.3, 0.52 * build.bodyGirth, 0.5 * side);
+      chest.add(root);
 
-      const upper = boneMesh(new THREE.CylinderGeometry(0.08, 0.16, 3.2, 8), body);
+      const shoulder = limbMesh(new THREE.SphereGeometry(0.22, 10, 8), body);
+      root.add(shoulder);
+      const upper = limbMesh(new THREE.CylinderGeometry(0.09, 0.17, 3.2 * span, 8), body);
       upper.rotation.x = Math.PI / 2;
-      upper.position.set(-0.2, 0.1, 1.5 * side);
-      wingRoot.add(upper);
+      upper.position.set(-0.1, 0.05, 1.5 * span * side);
+      root.add(upper);
 
-      const shape = new THREE.Shape();
-      shape.moveTo(0, 0);
-      shape.lineTo(2.6, 0.35 * side);
-      shape.lineTo(4.1, 0.1 * side);
-      shape.lineTo(3.2, -1.3 * side);
-      shape.lineTo(1.1, -1.05 * side);
-      shape.lineTo(0.15, -0.25 * side);
-      const membrane = boneMesh(new THREE.ShapeGeometry(shape), wing);
-      membrane.rotation.y = -Math.PI / 2;
-      membrane.rotation.z = side * 0.08;
-      membrane.position.set(-0.4, -0.15, 0.35 * side);
-      wingRoot.add(membrane);
-
-      const finger = boneMesh(new THREE.CylinderGeometry(0.04, 0.07, 3.4, 6), body);
-      finger.rotation.x = Math.PI / 2;
-      finger.rotation.y = -0.35 * side;
-      finger.position.set(-1.1, -0.15, 2.0 * side);
-      wingRoot.add(finger);
-      this.bones.wings.push(wingRoot);
+      const membrane = new THREE.Mesh(membraneGeometry(span), wing);
+      membrane.castShadow = true;
+      membrane.scale.z = side;
+      membrane.position.set(-0.35, -0.1, 0.2 * side);
+      root.add(membrane);
       this._addHit("wing", membrane, 0.55);
-    }
 
-    for (const [x, z] of [
-      [0.7, 0.45],
-      [0.7, -0.45],
-      [-1.3, 0.4],
-      [-1.3, -0.4],
+      for (const [reach, drop, thick] of [
+        [4.3, -0.2, 0.06],
+        [2.7, -1.15, 0.05],
+        [1.55, -1.25, 0.04],
+      ]) {
+        const finger = limbMesh(new THREE.CylinderGeometry(thick * 0.6, thick, Math.hypot(reach * span, drop), 6), body);
+        finger.position.set(-0.35 + drop * 0.5, -0.1, (0.2 + reach * span * 0.5) * side);
+        finger.rotation.x = Math.PI / 2;
+        finger.rotation.y = Math.atan2(drop, reach * span) * -side;
+        root.add(finger);
+      }
+
+      const hook = limbMesh(new THREE.ConeGeometry(0.06, 0.4, 5), claw);
+      hook.position.set(-0.3, -0.1, 4.4 * span * side);
+      hook.rotation.z = -Math.PI / 2.4;
+      root.add(hook);
+
+      this.bones.wings.push(root);
+    }
+  }
+
+  _buildLegs(chest, body, claw, girth) {
+    this.bones.legs = [];
+    for (const [x, z, size] of [
+      [0.72, 0.42, 1.0],
+      [0.72, -0.42, 1.0],
+      [-1.25, 0.46, 1.25],
+      [-1.25, -0.46, 1.25],
     ]) {
-      const leg = boneMesh(new THREE.CylinderGeometry(0.12, 0.2, 1.1, 8), body);
-      leg.position.set(x, -0.85, z);
-      const claw = boneMesh(new THREE.ConeGeometry(0.08, 0.28, 5), body);
-      claw.position.set(0, -0.65, 0);
-      claw.rotation.x = Math.PI;
-      leg.add(claw);
-      chest.add(leg);
+      const hip = new THREE.Group();
+      hip.position.set(x, -0.42 * girth, z * girth);
+      const thigh = limbMesh(new THREE.CylinderGeometry(0.15 * size, 0.22 * size, 0.7 * size, 8), body);
+      thigh.position.y = -0.32 * size;
+      thigh.rotation.x = 0.3 * Math.sign(z);
+      hip.add(thigh);
+      const shin = limbMesh(new THREE.CylinderGeometry(0.1 * size, 0.14 * size, 0.62 * size, 8), body);
+      shin.position.set(0, -0.62 * size, -0.14 * size * Math.sign(z));
+      hip.add(shin);
+      const foot = limbMesh(new THREE.BoxGeometry(0.26 * size, 0.1 * size, 0.34 * size), body);
+      foot.position.set(0, -0.94 * size, -0.24 * size * Math.sign(z));
+      hip.add(foot);
+      for (let i = -1; i <= 1; i++) {
+        const talon = limbMesh(new THREE.ConeGeometry(0.05 * size, 0.26 * size, 5), claw);
+        talon.position.set(0.09 * size * i, -0.98 * size, -0.42 * size * Math.sign(z));
+        talon.rotation.x = Math.PI / 2 * Math.sign(z) * -1;
+        hip.add(talon);
+      }
+      chest.add(hip);
+      this.bones.legs.push(hip);
     }
-
-    this.root.rotation.y = Math.PI / 2;
-    const glow = new THREE.PointLight(0xff4a12, 22, 48, 1.4);
-    this.root.add(glow);
-    this.glow = glow;
   }
 
   mouthWorld(target = new THREE.Vector3()) {
@@ -195,38 +347,77 @@ export class Dragon {
     return target;
   }
 
+  /** The skull's forward axis is local +X, not the +Z that getWorldDirection reports. */
+  headForward(target = new THREE.Vector3()) {
+    this.bones.head.getWorldQuaternion(_q);
+    return target.set(1, 0, 0).applyQuaternion(_q).normalize();
+  }
+
+  /** Armor soaks a flat fraction everywhere except the skull. */
   takeDamage(amount, part = "body") {
     if (!this.alive) return 0;
-    const dealt = Math.max(1, amount);
+    const soak = part === "head" ? this.armor * 0.25 : this.armor;
+    const dealt = Math.max(1, amount * (1 - soak));
     this.hp = Math.max(0, this.hp - dealt);
     this.pain = 0.55;
-    if (this.hp <= 0) {
-      this.alive = false;
-    }
+    if (this.hp <= 0) this.alive = false;
     return dealt;
+  }
+
+  get hpFraction() {
+    return this.hp / this.maxHp;
   }
 
   update(dt, pose) {
     this.anim += dt;
-    const flap = Math.sin(this.anim * 3.4) * 0.42;
-    this.bones.wings[0].rotation.z = flap;
-    this.bones.wings[1].rotation.z = flap;
-    this.bones.neckA.rotation.z = Math.sin(this.anim * 1.4) * 0.08;
-    this.bones.neckB.rotation.z = Math.sin(this.anim * 1.4 + 0.4) * 0.1;
+    const look = this.spec.look;
+    const flapAmount = pose.flap ?? 1;
+    const rate = this.flapRate * (pose.flapRate ?? 1);
+    const flap = Math.sin(this.anim * rate) * 0.46 * flapAmount;
+    for (const w of this.bones.wings) {
+      w.rotation.z = flap - 0.06;
+      w.rotation.y = flap * 0.12;
+    }
+
+    this.bones.neck.forEach((seg, i) => {
+      seg.rotation.z = Math.sin(this.anim * 1.4 + i * 0.4) * 0.07 + (pose.neck ?? 0) * (i + 1) * 0.2;
+      seg.rotation.y = THREE.MathUtils.damp(seg.rotation.y, (pose.lookAt ?? 0) * 0.3, 4, dt);
+    });
+
+    const lash = pose.lash ?? 1;
     this.bones.tail.forEach((seg, i) => {
-      seg.rotation.y = Math.sin(this.anim * 2.1 + i * 0.7) * 0.18;
+      seg.rotation.y = Math.sin(this.anim * 2.1 + i * 0.7) * 0.18 * lash;
       seg.rotation.z = Math.cos(this.anim * 1.6 + i) * 0.05;
     });
+
+    this.bones.legs.forEach((leg, i) => {
+      const tuck = pose.grounded ? 0 : 0.55;
+      leg.rotation.x = THREE.MathUtils.damp(leg.rotation.x, tuck + Math.sin(this.anim * 1.1 + i) * 0.05, 3, dt);
+    });
+
     this.pain = Math.max(0, this.pain - dt);
-    this.jaw = THREE.MathUtils.damp(this.jaw, pose.jaw ?? 0, 6, dt);
+    this.jaw = THREE.MathUtils.damp(this.jaw, pose.jaw ?? 0.05, 8, dt);
     this.jawBone.rotation.z = this.jaw;
-    this.materials.body.emissiveIntensity = 2.8 + Math.sin(this.anim * 2.2) * 0.7 + this.pain * 2;
-    if (this.glow) this.glow.intensity = 18 + Math.sin(this.anim * 2.2) * 6;
+
+    const pulse = Math.sin(this.anim * 2.2) * 0.22 + 1;
+    const charge = pose.charge ?? 0;
+    this.materials.body.emissiveIntensity = look.emissiveBase * pulse + this.pain * 2 + charge * 3;
+    this.materials.wing.emissiveIntensity = look.emissiveBase * 0.3 * pulse + charge;
+    if (this.glow) this.glow.intensity = look.glowIntensity * pulse * (1 + charge * 1.5);
 
     if (pose.dead) {
       this.root.rotation.x = THREE.MathUtils.damp(this.root.rotation.x, 1.05, 2.2, dt);
+      this.root.rotation.z = THREE.MathUtils.damp(this.root.rotation.z, 0.7, 1.6, dt);
     } else {
       this.root.rotation.x = THREE.MathUtils.damp(this.root.rotation.x, pose.pitch ?? 0, 4, dt);
+      this.root.rotation.z = THREE.MathUtils.damp(this.root.rotation.z, pose.roll ?? 0, 3, dt);
     }
+  }
+
+  dispose() {
+    this.root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+    });
+    for (const mat of Object.values(this.materials)) mat.dispose();
   }
 }

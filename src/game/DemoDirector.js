@@ -9,7 +9,7 @@ export class DemoDirector {
   }
 
   update(dt, dragonPos) {
-    if (!this.enabled) return;
+    if (!this.enabled || !dragonPos) return;
     this.t += dt;
     const p = this.player;
     p.keys.delete("KeyW");

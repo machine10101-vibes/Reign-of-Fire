@@ -1,152 +1,652 @@
 import * as THREE from "three";
-import { CONFIG } from "./config.js";
+import { ATTACK } from "./species.js";
 
 export const DragonState = {
   PATROL: "patrol",
+  STALK: "stalk",
   ALERT: "alert",
-  DIVE: "dive",
-  BREATHE: "breathe",
+  ATTACK: "attack",
   RECOVER: "recover",
   PAIN: "pain",
+  FLEE: "flee",
   DEAD: "dead",
 };
 
+/**
+ * Range band each style is willing to open from, plus whether committing to it
+ * closes distance. `closer` styles are the only sane pick from across the map.
+ */
+const STYLE = {
+  [ATTACK.DIVE_FIRE]: { band: [18, 260], closer: true, tell: "Dive-fire. Break out of the cone." },
+  [ATTACK.STRAFE_RUN]: { band: [14, 260], closer: true, tell: "Strafing run — it will not slow down." },
+  [ATTACK.HOVER_BARRAGE]: { band: [22, 95], tell: "It is holding station to burn you down." },
+  [ATTACK.LAVA_MORTAR]: { band: [28, 140], tell: "Mortar arc — move sideways, do not backpedal." },
+  [ATTACK.AMBUSH_LUNGE]: { band: [6, 120], closer: true, tell: "Lunge incoming — it came in silent." },
+  [ATTACK.VENOM_SPRAY]: { band: [8, 62], tell: "Caustic spray. The cloud lingers, keep moving." },
+  [ATTACK.TAIL_SWEEP]: { band: [0, 36], tell: "Tail sweep at ground level — get airborne or get clear." },
+};
+
+const _v = new THREE.Vector3();
+const _aim = new THREE.Vector3();
+const _side = new THREE.Vector3();
+
+function noise(scale) {
+  return (Math.random() - 0.5) * scale;
+}
+
 export class DragonAI {
-  constructor(dragon) {
+  constructor(dragon, world, home) {
     this.dragon = dragon;
+    this.spec = dragon.spec;
+    this.mind = dragon.spec.mind;
+    this.stats = dragon.spec.stats;
+    this.world = world;
+    this.home = home.clone();
+    this.clearance = dragon.spec.build.scale * 0.5 + 2;
+
     this.state = DragonState.PATROL;
     this.t = 0;
-    this.angle = 0;
-    this.target = new THREE.Vector3();
-    this.velocity = new THREE.Vector3();
-    this.center = new THREE.Vector3(6, CONFIG.dragon.patrolHeight, -28);
-    this.hint = "Ashwrought patrols the ash ceiling.";
-    this.breathing = false;
-    this.spotTimer = 0;
+    this.phaseT = 0;
+    this.angle = Math.random() * Math.PI * 2;
+    this.target = dragon.root.position.clone();
+    this.heading = new THREE.Vector3(0, 0, 1);
+    this.speed = this.stats.flySpeed;
+    this.attackStyle = null;
+    this.phase = "windup";
+
+    this.breathKind = dragon.spec.mind.breath ?? "fire";
+    this.breath = { active: false, kind: this.breathKind, spread: 1 };
+    this.requests = [];
+    this.melee = 0;
+    this.charge = 0;
+    this.flap = 1;
+    this.roll = 0;
+    this.pitch = 0.06;
+    this.engaged = false;
+    this.hint = dragon.spec.lines.idle;
+    this.stateLabel = "patrol";
+    this._hitCount = 0;
+    this._flinch = 1;
+    this.fallSpeed = 4;
   }
 
-  update(dt, playerPos) {
+  get position() {
+    return this.dragon.root.position;
+  }
+
+  /** 0..1 live aggression: personality, softened by wounds it cannot shrug off. */
+  get aggressionNow() {
+    const wounded = 1 - this.dragon.hpFraction;
+    const nerve = this.mind.courage;
+    return THREE.MathUtils.clamp(this.mind.aggression + wounded * (nerve - 0.5) * 0.8, 0, 1);
+  }
+
+  update(dt, ctx) {
     this.t += dt;
-    if (!this.dragon.alive) {
-      this.state = DragonState.DEAD;
-    }
+    this.phaseT += dt;
+    this.melee = 0;
+    this.breath.active = false;
+    this.charge = Math.max(0, this.charge - dt * 2);
+
+    if (!this.dragon.alive && this.state !== DragonState.DEAD) this._enter(DragonState.DEAD);
 
     switch (this.state) {
       case DragonState.PATROL:
-        this._patrol(dt, playerPos);
+        this._patrol(dt, ctx);
+        break;
+      case DragonState.STALK:
+        this._stalk(dt, ctx);
         break;
       case DragonState.ALERT:
-        this._alert(dt, playerPos);
+        this._alert(dt, ctx);
         break;
-      case DragonState.DIVE:
-        this._dive(dt, playerPos);
-        break;
-      case DragonState.BREATHE:
-        this._breathe(dt, playerPos);
+      case DragonState.ATTACK:
+        this._attack(dt, ctx);
         break;
       case DragonState.RECOVER:
-        this._recover(dt, playerPos);
+        this._recover(dt, ctx);
         break;
       case DragonState.PAIN:
-        this._pain(dt, playerPos);
+        this._pain(dt, ctx);
+        break;
+      case DragonState.FLEE:
+        this._flee(dt, ctx);
         break;
       case DragonState.DEAD:
         this._dead(dt);
         break;
     }
 
-    this.dragon.root.position.lerp(this.target, 1 - Math.exp(-dt * 3.2));
-    const look = this.velocity.lengthSq() > 0.4 ? this.dragon.root.position.clone().add(this.velocity) : playerPos;
-    const matrix = this.dragon.root.matrixWorld;
-    const current = new THREE.Vector3();
-    this.dragon.root.getWorldDirection(current);
-    const yaw = Math.atan2(look.x - this.dragon.root.position.x, look.z - this.dragon.root.position.z);
-    this.dragon.root.rotation.y = THREE.MathUtils.damp(this.dragon.root.rotation.y, yaw + Math.PI / 2, 3.4, dt);
+    this._move(dt);
+    this._pose(dt, ctx);
+  }
+
+  _enter(state) {
+    this.state = state;
+    this.phaseT = 0;
+    this.stateLabel = state;
+  }
+
+  _move(dt) {
+    const pos = this.position;
+    if (this.state === DragonState.DEAD) {
+      pos.y -= this.fallSpeed * dt;
+      this.fallSpeed = Math.min(52, this.fallSpeed + 34 * dt);
+      const floor = this.world.heightAt(pos.x, pos.z) + this.dragon.spec.build.scale * 0.22;
+      if (pos.y <= floor) {
+        pos.y = floor;
+        this.grounded = true;
+      }
+      return;
+    }
+
+    _v.subVectors(this.target, pos);
+    const dist = _v.length();
+    if (dist > 0.001) {
+      const step = Math.min(dist, this.speed * dt);
+      _v.divideScalar(dist);
+      pos.addScaledVector(_v, step);
+      this.heading.lerp(_v, 1 - Math.exp(-dt * this.stats.turnRate));
+      if (this.heading.lengthSq() > 0.0001) this.heading.normalize();
+    }
+
+    const floor = this.world.heightAt(pos.x, pos.z) + this.clearance;
+    if (pos.y < floor) pos.y = THREE.MathUtils.damp(pos.y, floor, 8, dt);
+    this.grounded = pos.y <= floor + 0.5;
+  }
+
+  _pose(dt, ctx) {
+    // The rig's nose is local +X, so the body yaw trails the heading by a quarter turn.
+    const yaw = Math.atan2(this.heading.x, this.heading.z) - Math.PI / 2;
+    const current = this.dragon.root.rotation.y;
+    const delta = ((yaw - current + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    this.dragon.root.rotation.y = current + delta * (1 - Math.exp(-dt * this.stats.turnRate));
+
+    let lookAt = 0;
+    if (ctx?.playerPos && this.state !== DragonState.DEAD) {
+      _v.subVectors(ctx.playerPos, this.position).normalize();
+      _side.copy(this.heading).cross(_v);
+      lookAt = THREE.MathUtils.clamp(_side.y * 2, -1, 1);
+    }
 
     this.dragon.update(dt, {
-      jaw: this.breathing ? 0.55 : 0.08,
-      pitch: this.state === DragonState.DIVE ? -0.42 : this.state === DragonState.DEAD ? 0.9 : 0.08,
+      jaw: this.breath.active ? 0.6 : this.state === DragonState.ATTACK ? 0.25 : 0.05,
+      pitch: this.pitch,
+      roll: this.roll,
+      flap: this.flap,
+      flapRate: this.state === DragonState.ATTACK ? 1.35 : 1,
+      lash: this.state === DragonState.PAIN ? 2.4 : 1,
+      neck: this.breath.active ? -0.12 : 0,
+      lookAt,
+      grounded: this.grounded,
+      charge: this.charge,
       dead: this.state === DragonState.DEAD,
     });
-    void matrix;
-    return this;
   }
 
-  notifyHit() {
-    if (!this.dragon.alive) return;
-    this.state = DragonState.PAIN;
-    this.spotTimer = 0.45;
-    this.hint = "The beast recoils — molten plates split.";
-  }
+  // ---------------------------------------------------------------- states
 
-  _patrol(dt, playerPos) {
-    this.angle += dt * 0.42;
-    const r = CONFIG.dragon.patrolRadius;
+  _patrol(dt, ctx) {
+    this.flap = 1;
+    this.roll = Math.sin(this.t * 0.5) * 0.12;
+    this.pitch = 0.05;
+    this.speed = this.stats.flySpeed * 0.75;
+    this.angle += dt * (0.3 + this.mind.erratic * 0.5);
+
+    // Low-territorial species drift after the player instead of holding a ring.
+    const anchor = _aim.copy(this.home).lerp(ctx.playerPos, (1 - this.mind.territorial) * 0.55);
+    const r = this.stats.patrolRadius;
     this.target.set(
-      this.center.x + Math.cos(this.angle) * r,
-      this.center.y + Math.sin(this.t * 0.7) * 3.2,
-      this.center.z + Math.sin(this.angle) * r * 0.55
+      anchor.x + Math.cos(this.angle) * r + noise(this.mind.erratic * 14),
+      this.home.y + Math.sin(this.t * 0.6) * 4 + noise(this.mind.erratic * 5),
+      anchor.z + Math.sin(this.angle) * r * 0.7 + noise(this.mind.erratic * 14)
     );
-    this.velocity.subVectors(this.target, this.dragon.root.position);
-    const dist = playerPos.distanceTo(this.dragon.root.position);
-    if (dist < CONFIG.dragon.spotRange) {
-      this.state = DragonState.ALERT;
-      this.spotTimer = 1.15;
-      this.hint = "Spotted. Ashwrought banks toward the ridge.";
+
+    if (this._shouldEngage(ctx)) {
+      this.engaged = true;
+      if (this.mind.stalker) {
+        this._enter(DragonState.STALK);
+        this.hint = this.spec.lines.spot;
+      } else {
+        this._enter(DragonState.ALERT);
+        this.hint = this.spec.lines.spot;
+      }
     }
   }
 
-  _alert(dt, playerPos) {
-    this.spotTimer -= dt;
-    this.target.lerp(playerPos.clone().add(new THREE.Vector3(0, 28, 0)), 0.04);
-    this.velocity.subVectors(this.target, this.dragon.root.position);
-    if (this.spotTimer <= 0) this.state = DragonState.DIVE;
-  }
+  /** Pale Stalker behaviour: shadow the player low and silent, then pounce. */
+  _stalk(dt, ctx) {
+    this.flap = 0.12;
+    this.pitch = 0.02;
+    this.speed = this.stats.flySpeed * 0.85;
+    const behind = _aim.subVectors(ctx.playerPos, this.position).setY(0).normalize();
+    const standoff = this.stats.attackRange * 1.9;
+    this.target
+      .copy(ctx.playerPos)
+      .addScaledVector(behind, -standoff)
+      .setY(this.world.heightAt(ctx.playerPos.x, ctx.playerPos.z) + 10 + Math.sin(this.t * 0.7) * 3);
+    this.roll = THREE.MathUtils.damp(this.roll, 0, 3, dt);
 
-  _dive(dt, playerPos) {
-    const aim = playerPos.clone().add(new THREE.Vector3(0, 10, 0));
-    this.target.lerp(aim, 0.08);
-    this.velocity.subVectors(this.target, this.dragon.root.position).multiplyScalar(CONFIG.dragon.diveSpeed);
-    const dist = this.dragon.root.position.distanceTo(playerPos);
-    if (dist < CONFIG.dragon.breathRange + 8 || this.dragon.root.position.y < playerPos.y + 14) {
-      this.state = DragonState.BREATHE;
-      this.spotTimer = 1.6;
-      this.hint = "Dive-fire. Break the cone.";
+    const ready = this.phaseT > this.mind.patience * 1.6;
+    const pounceWindow = ctx.playerVulnerable || this.phaseT > this.mind.patience * 3;
+    if (ready && pounceWindow) {
+      this._chooseAttack(ctx);
+      this._enter(DragonState.ATTACK);
     }
   }
 
-  _breathe(dt, playerPos) {
-    this.breathing = true;
-    this.spotTimer -= dt;
-    this.target.copy(this.dragon.root.position);
-    this.target.y = Math.max(this.target.y, playerPos.y + 12);
-    if (this.spotTimer <= 0) {
-      this.breathing = false;
-      this.state = DragonState.RECOVER;
-      this.spotTimer = 2.4;
-      this.hint = "It climbs the thermal. Lead the next bolt.";
+  _alert(dt, ctx) {
+    this.flap = 1.15;
+    this.speed = this.stats.flySpeed;
+    this.roll = THREE.MathUtils.damp(this.roll, 0, 3, dt);
+    this.target
+      .copy(ctx.playerPos)
+      .add(_aim.set(noise(24), 26 + this.stats.patrolHeight * 0.25, noise(24)));
+    const windup = THREE.MathUtils.lerp(1.6, 0.35, this.aggressionNow) * this.mind.patience;
+    if (this.phaseT > windup) {
+      this._chooseAttack(ctx);
+      this._enter(DragonState.ATTACK);
     }
   }
 
-  _recover(dt, playerPos) {
-    this.breathing = false;
-    this.spotTimer -= dt;
-    this.target.set(playerPos.x + 28, CONFIG.dragon.patrolHeight, playerPos.z - 24);
-    if (this.spotTimer <= 0) this.state = this.dragon.hp < this.dragon.maxHp * 0.35 ? DragonState.DIVE : DragonState.PATROL;
+  _attack(dt, ctx) {
+    switch (this.attackStyle) {
+      case ATTACK.DIVE_FIRE:
+        this._diveFire(dt, ctx);
+        break;
+      case ATTACK.STRAFE_RUN:
+        this._strafeRun(dt, ctx);
+        break;
+      case ATTACK.HOVER_BARRAGE:
+        this._hoverBarrage(dt, ctx);
+        break;
+      case ATTACK.LAVA_MORTAR:
+        this._lavaMortar(dt, ctx);
+        break;
+      case ATTACK.AMBUSH_LUNGE:
+        this._ambushLunge(dt, ctx);
+        break;
+      case ATTACK.VENOM_SPRAY:
+        this._venomSpray(dt, ctx);
+        break;
+      case ATTACK.TAIL_SWEEP:
+        this._tailSweep(dt, ctx);
+        break;
+      default:
+        this._endAttack();
+    }
   }
 
-  _pain(dt, playerPos) {
-    this.breathing = false;
-    this.spotTimer -= dt;
-    this.target.copy(this.dragon.root.position).add(new THREE.Vector3(8, 6, -6));
-    if (this.spotTimer <= 0) this.state = DragonState.ALERT;
-    void playerPos;
+  _recover(dt, ctx) {
+    this.flap = 1;
+    this.pitch = -0.14;
+    this.speed = this.stats.flySpeed;
+    this.roll = THREE.MathUtils.damp(this.roll, 0, 2.5, dt);
+    const away = _aim.subVectors(this.position, ctx.playerPos).setY(0).normalize();
+    this.target
+      .copy(ctx.playerPos)
+      .addScaledVector(away, this.stats.attackRange * 1.8)
+      .setY(this.home.y + noise(6));
+
+    const cooldown = THREE.MathUtils.lerp(4.2, 0.9, this.aggressionNow) * this.mind.patience;
+    if (this.phaseT > cooldown) {
+      if (this._shouldFlee()) {
+        this._enter(DragonState.FLEE);
+        this.hint = this.spec.lines.flee;
+      } else if (this.mind.stalker) {
+        this._enter(DragonState.STALK);
+      } else if (this._shouldEngage(ctx)) {
+        this._chooseAttack(ctx);
+        this._enter(DragonState.ATTACK);
+      } else {
+        this._enter(DragonState.PATROL);
+        this.hint = this.spec.lines.idle;
+      }
+    }
+  }
+
+  _pain(dt, ctx) {
+    this.flap = 1.5;
+    this.speed = this.stats.flySpeed * 1.2;
+    this.roll = THREE.MathUtils.damp(this.roll, 0.5 * this._flinch, 5, dt);
+    const away = _aim.subVectors(this.position, ctx.playerPos).normalize();
+    this.target.copy(this.position).addScaledVector(away, 18).add(_v.set(0, 8, 0));
+    const flinch = THREE.MathUtils.lerp(1.1, 0.18, this.mind.courage);
+    if (this.phaseT > flinch) {
+      if (this._shouldFlee()) {
+        this._enter(DragonState.FLEE);
+        this.hint = this.spec.lines.flee;
+      } else if (this.aggressionNow > 0.7) {
+        this._chooseAttack(ctx);
+        this._enter(DragonState.ATTACK);
+      } else {
+        this._enter(DragonState.RECOVER);
+      }
+    }
+  }
+
+  _flee(dt, ctx) {
+    this.flap = 1.6;
+    this.pitch = -0.4;
+    this.speed = this.stats.flySpeed * 1.5;
+    const away = _aim.subVectors(this.position, ctx.playerPos).setY(0).normalize();
+    this.target.copy(this.position).addScaledVector(away, 60).setY(this.home.y + 34);
+    // Courage recovers with distance; a scavenger that escapes will come back.
+    if (this.position.distanceTo(ctx.playerPos) > this.stats.spotRange * 0.9 && this.phaseT > 6) {
+      this._enter(DragonState.PATROL);
+      this.hint = this.spec.lines.idle;
+    }
   }
 
   _dead(dt) {
-    this.breathing = false;
-    this.hint = "Ashwrought falls. The ridge goes quiet.";
-    this.target.y -= 18 * dt;
-    this.velocity.set(0, -18, 0);
+    this.flap = 0;
+    this.hint = this.spec.lines.dead;
+    this.stateLabel = "dead";
+    void dt;
+  }
+
+  // --------------------------------------------------------------- attacks
+
+  _diveFire(dt, ctx) {
+    const toPlayer = _aim.subVectors(ctx.playerPos, this.position);
+    const dist = toPlayer.length();
+    if (this.phase === "windup") {
+      this.flap = 1.3;
+      this.pitch = -0.3;
+      this.speed = this.stats.flySpeed * 1.1;
+      this.target.copy(ctx.playerPos).add(_v.set(noise(10), 34, noise(10)));
+      if (this.phaseT > 1.1 || this.position.y > ctx.playerPos.y + 28) this._phase("commit");
+    } else if (this.phase === "commit") {
+      this.flap = 0.35;
+      this.pitch = -0.5;
+      this.charge = Math.min(1, this.charge + dt * 2.5);
+      this.speed = this.stats.diveSpeed;
+      this.target.copy(ctx.playerPos).add(_v.set(0, this.clearance * 0.7, 0));
+      if (dist < this.stats.attackRange * 0.85 || this.phaseT > 3.2) this._phase("release");
+    } else {
+      this.flap = 0.7;
+      this.pitch = 0.12;
+      this.speed = this.stats.flySpeed * 0.9;
+      this.breath.active = dist < this.stats.attackRange;
+      this.breath.kind = "fire";
+      this.target.copy(ctx.playerPos).add(_v.set(noise(6), 16, noise(6)));
+      if (this.phaseT > 1.2 + this.mind.patience * 0.4) this._endAttack();
+    }
+  }
+
+  _strafeRun(dt, ctx) {
+    if (this.phase === "windup") {
+      this.flap = 1.5;
+      this.speed = this.stats.flySpeed * 1.2;
+      // Swing out perpendicular so the pass crosses the player's front.
+      _aim.subVectors(this.position, ctx.playerPos).setY(0).normalize();
+      _side.set(-_aim.z, 0, _aim.x).multiplyScalar(this.stats.attackRange * 1.6);
+      this.target.copy(ctx.playerPos).addScaledVector(_aim, this.stats.attackRange * 1.4).add(_side);
+      this.target.y = ctx.playerPos.y + 16 + noise(6);
+      this.roll = THREE.MathUtils.damp(this.roll, 0.85, 4, dt);
+      if (this.phaseT > 0.9 || this.position.distanceTo(this.target) < 8) {
+        this._phase("commit");
+        this._runVector = _aim.subVectors(ctx.playerPos, this.position).setY(0).normalize().clone();
+        this._runFrom = this.position.clone();
+      }
+    } else if (this.phase === "commit") {
+      this.flap = 0.5;
+      this.pitch = -0.12;
+      this.speed = this.stats.flySpeed * 2.0;
+      this.roll = THREE.MathUtils.damp(this.roll, -0.4, 5, dt);
+      this.target
+        .copy(this._runFrom)
+        .addScaledVector(this._runVector, this.stats.attackRange * 4)
+        .setY(ctx.playerPos.y + 8);
+      const dist = this.position.distanceTo(ctx.playerPos);
+      this.breath.active = dist < this.stats.attackRange * 0.8;
+      this.breath.kind = "fire";
+      this.breath.spread = 1.4;
+      if (this.phaseT > 2.6 || this.position.distanceTo(this.target) < 10) this._phase("release");
+    } else {
+      this.flap = 1.4;
+      this.pitch = -0.34;
+      this.speed = this.stats.flySpeed * 1.4;
+      this.roll = THREE.MathUtils.damp(this.roll, 0.6, 4, dt);
+      this.target.copy(this.position).addScaledVector(this._runVector, 40).add(_v.set(0, 22, 0));
+      if (this.phaseT > 0.8) this._endAttack();
+    }
+  }
+
+  _hoverBarrage(dt, ctx) {
+    this.flap = 1.25;
+    this.pitch = 0.1;
+    this.speed = this.stats.flySpeed * 0.6;
+    _aim.subVectors(this.position, ctx.playerPos).setY(0).normalize();
+    this.target
+      .copy(ctx.playerPos)
+      .addScaledVector(_aim, this.stats.attackRange * 0.7)
+      .setY(ctx.playerPos.y + 18 + Math.sin(this.t * 1.4) * 3);
+    // Three short bursts with gaps you can push cover through.
+    const cycle = this.phaseT % 1.5;
+    this.breath.active = cycle < 0.75;
+    this.breath.kind = this.breathKind;
+    this.breath.spread = 0.8;
+    this.charge = cycle > 0.55 && cycle < 0.75 ? 1 : this.charge;
+    if (this.phaseT > 4.5) this._endAttack();
+    void dt;
+  }
+
+  _lavaMortar(dt, ctx) {
+    this.flap = 1.1;
+    this.pitch = 0.08;
+    this.speed = this.stats.flySpeed * 0.5;
+    _aim.subVectors(this.position, ctx.playerPos).setY(0).normalize();
+    this.target
+      .copy(ctx.playerPos)
+      .addScaledVector(_aim, this.stats.attackRange * 0.9)
+      .setY(ctx.playerPos.y + 26 + Math.sin(this.t) * 2);
+
+    this.charge = Math.min(1, this.charge + dt * 1.4);
+    this._shots = this._shots ?? 0;
+    const gap = 0.9;
+    if (this.phaseT > 1.2 + this._shots * gap && this._shots < 3) {
+      this._shots++;
+      this.charge = 0;
+      // Lead the player so backpedalling walks into the splash.
+      const lead = _v.copy(ctx.playerVelocity ?? _v.set(0, 0, 0)).multiplyScalar(0.9);
+      this.requests.push({
+        type: "mortar",
+        origin: this.dragon.mouthWorld(new THREE.Vector3()),
+        target: ctx.playerPos.clone().add(lead).add(new THREE.Vector3(noise(5), 0, noise(5))),
+        damage: this.stats.damage,
+      });
+    }
+    if (this._shots >= 3 && this.phaseT > 1.2 + 3 * gap + 0.6) {
+      this._shots = 0;
+      this._endAttack();
+    }
+  }
+
+  _ambushLunge(dt, ctx) {
+    const dist = this.position.distanceTo(ctx.playerPos);
+    if (this.phase === "windup") {
+      this.flap = 0.1;
+      this.pitch = 0.04;
+      this.speed = this.stats.flySpeed * 0.9;
+      _aim.subVectors(this.position, ctx.playerPos).setY(0).normalize();
+      this.target
+        .copy(ctx.playerPos)
+        .addScaledVector(_aim, this.stats.attackRange * 1.4)
+        .setY(this.world.heightAt(this.position.x, this.position.z) + this.clearance + 4);
+      if (dist < this.stats.attackRange * 1.7 || this.phaseT > 2.4) this._phase("commit");
+    } else if (this.phase === "commit") {
+      this.flap = 1.9;
+      this.pitch = -0.05;
+      this.speed = this.stats.diveSpeed;
+      this.charge = Math.min(1, this.charge + dt * 4);
+      this.target.copy(ctx.playerPos).add(_v.set(0, this.clearance * 0.35, 0));
+      if (dist < this.clearance + 6) {
+        this.melee = this.stats.damage;
+        this.hint = `${this.spec.name} slams past you.`;
+        this._phase("release");
+      } else if (this.phaseT > 2.2) {
+        this._phase("release");
+      }
+    } else {
+      this.flap = 1.6;
+      this.pitch = -0.42;
+      this.speed = this.stats.flySpeed * 1.5;
+      this.breath.active = this.phaseT < 0.35 && dist < this.stats.attackRange;
+      _aim.subVectors(this.position, ctx.playerPos).normalize();
+      this.target.copy(this.position).addScaledVector(_aim, 34).add(_v.set(0, 20, 0));
+      if (this.phaseT > 1.0) this._endAttack();
+    }
+  }
+
+  _venomSpray(dt, ctx) {
+    this.flap = 1.15;
+    this.pitch = 0.06;
+    this.speed = this.stats.flySpeed * 0.75;
+    // Slide across the player's front so the cloud fences off their cover.
+    _aim.subVectors(this.position, ctx.playerPos).setY(0).normalize();
+    _side.set(-_aim.z, 0, _aim.x).multiplyScalar(Math.sin(this.phaseT * 1.3) * this.stats.attackRange * 0.8);
+    this.target
+      .copy(ctx.playerPos)
+      .addScaledVector(_aim, this.stats.attackRange * 0.6)
+      .add(_side)
+      .setY(ctx.playerPos.y + 14);
+    this.roll = THREE.MathUtils.damp(this.roll, Math.cos(this.phaseT * 1.3) * 0.4, 4, dt);
+
+    const spraying = this.phaseT > 0.7 && this.phaseT < 3.4;
+    this.breath.active = spraying;
+    this.breath.kind = "venom";
+    this.breath.spread = 1.8;
+    this.charge = spraying ? 0.6 : Math.min(1, this.charge + dt);
+    this._cloudT = (this._cloudT ?? 0) + dt;
+    if (spraying && this._cloudT > 0.45) {
+      this._cloudT = 0;
+      this.requests.push({
+        type: "cloud",
+        origin: this.dragon.mouthWorld(new THREE.Vector3()),
+        toward: ctx.playerPos.clone(),
+        damage: this.stats.damage * 0.5,
+      });
+    }
+    if (this.phaseT > 4.0) this._endAttack();
+  }
+
+  _tailSweep(dt, ctx) {
+    const dist = this.position.distanceTo(ctx.playerPos);
+    if (this.phase === "windup") {
+      this.flap = 1.4;
+      this.pitch = 0.1;
+      this.speed = this.stats.flySpeed * 1.2;
+      this.target
+        .copy(ctx.playerPos)
+        .setY(this.world.heightAt(ctx.playerPos.x, ctx.playerPos.z) + this.clearance);
+      this.charge = Math.min(1, this.charge + dt * 2);
+      if (dist < this.clearance + 12 || this.phaseT > 2.8) this._phase("commit");
+    } else if (this.phase === "commit") {
+      this.flap = 0.3;
+      this.speed = this.stats.flySpeed * 1.6;
+      this.roll = THREE.MathUtils.damp(this.roll, 0.7, 6, dt);
+      _aim.subVectors(ctx.playerPos, this.position).setY(0).normalize();
+      this.target.copy(ctx.playerPos).addScaledVector(_aim, 26);
+      if (dist < this.clearance + 10) {
+        this.melee = this.stats.damage * 1.4;
+        this.requests.push({ type: "shockwave", origin: this.position.clone() });
+        this.hint = `${this.spec.name} sweeps its tail through the rock.`;
+        this._phase("release");
+      } else if (this.phaseT > 1.6) this._phase("release");
+    } else {
+      this.flap = 1.5;
+      this.pitch = -0.3;
+      this.speed = this.stats.flySpeed * 1.3;
+      this.roll = THREE.MathUtils.damp(this.roll, 0, 4, dt);
+      this.target.copy(this.position).add(_v.set(noise(18), 24, noise(18)));
+      if (this.phaseT > 0.9) this._endAttack();
+    }
+  }
+
+  _phase(next) {
+    this.phase = next;
+    this.phaseT = 0;
+  }
+
+  _endAttack() {
+    this.attackStyle = null;
+    this.phase = "windup";
+    this._enter(this._shouldFlee() ? DragonState.FLEE : DragonState.RECOVER);
+    if (this.state === DragonState.FLEE) this.hint = this.spec.lines.flee;
+  }
+
+  // ----------------------------------------------------------- personality
+
+  _shouldFlee() {
+    if (!this.mind.fleeAt) return false;
+    return this.dragon.hpFraction < this.mind.fleeAt;
+  }
+
+  _shouldEngage(ctx) {
+    const dist = this.position.distanceTo(ctx.playerPos);
+    const reach = this.stats.spotRange * (0.6 + this.aggressionNow * 0.6);
+    if (dist > reach) return false;
+    if (this._shouldFlee()) return false;
+    // Scavengers only commit when you are dry or already busy with something else.
+    if (this.mind.opportunist && !(ctx.playerVulnerable || ctx.alliesAttacking > 0)) {
+      return dist < this.stats.attackRange * 1.2;
+    }
+    // A territorial beast will not chase far past its own ridge.
+    if (this.mind.territorial > 0.8 && this.position.distanceTo(this.home) > this.stats.patrolRadius * 4) {
+      return false;
+    }
+    return true;
+  }
+
+  _chooseAttack(ctx) {
+    const dist = this.position.distanceTo(ctx.playerPos);
+    const pool = this.mind.attacks;
+    const viable = pool.filter((style) => {
+      const meta = STYLE[style];
+      if (!meta) return false;
+      if (dist < meta.band[0]) return false;
+      if (dist > meta.band[1]) return meta.closer === true;
+      return true;
+    });
+    const candidates = viable.length ? viable : pool.filter((s) => STYLE[s]?.closer);
+    const list = candidates.length ? candidates : pool;
+    // Erratic species roll blind; disciplined ones favour the nearest-band pick.
+    const pick =
+      Math.random() < this.mind.erratic
+        ? list[Math.floor(Math.random() * list.length)]
+        : list[0];
+    this.attackStyle = pick;
+    this.phase = "windup";
+    this._shots = 0;
+    this.hint = STYLE[pick]?.tell ?? this.spec.lines.attack;
+    return pick;
+  }
+
+  notifyHit(part) {
+    if (!this.dragon.alive) return;
+    this._hitCount++;
+    this.engaged = true;
+    this._flinch = Math.random() < 0.5 ? -1 : 1;
+    if (this._shouldFlee()) {
+      this._enter(DragonState.FLEE);
+      this.hint = this.spec.lines.flee;
+      return;
+    }
+    // Brave species shrug off glancing hits and keep their attack committed.
+    const shrug = this.mind.courage * 0.7 + (this.state === DragonState.ATTACK ? 0.2 : 0);
+    if (Math.random() < shrug && part !== "head") {
+      this.hint = this.spec.lines.pain;
+      return;
+    }
+    this._enter(DragonState.PAIN);
+    this.hint = this.spec.lines.pain;
+  }
+
+  drainRequests() {
+    if (!this.requests.length) return null;
+    const out = this.requests;
+    this.requests = [];
+    return out;
   }
 }

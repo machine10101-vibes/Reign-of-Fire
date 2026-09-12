@@ -24,12 +24,13 @@ export class Particles {
     this.scene = scene;
     this.ash = makePoints(CONFIG.quality.particleAsh, 0.18, 0x6a5b50, 0.55);
     this.ember = makePoints(CONFIG.quality.particleEmber, 0.12, 0xff6a18, 0.9);
-    this.fire = makePoints(280, 0.45, 0xff3a00, 0.95);
-    this.blood = makePoints(160, 0.14, 0x6a0508, 0.95);
+    this.fire = makePoints(420, 0.45, 0xff3a00, 0.95);
+    this.venom = makePoints(320, 0.5, 0xaaff20, 0.7);
+    this.blood = makePoints(220, 0.14, 0x6a0508, 0.95);
     this.blood.points.material.blending = THREE.NormalBlending;
-    this.chips = makePoints(120, 0.1, 0x1a1a1a, 1);
+    this.chips = makePoints(180, 0.1, 0x1a1a1a, 1);
     this.chips.points.material.blending = THREE.NormalBlending;
-    for (const sys of [this.ash, this.ember, this.fire, this.blood, this.chips]) {
+    for (const sys of [this.ash, this.ember, this.fire, this.venom, this.blood, this.chips]) {
       scene.add(sys.points);
     }
     this._seedAsh();
@@ -70,9 +71,11 @@ export class Particles {
     }
   }
 
-  fireBreath(origin, target) {
+  /** Venom is slower and spreads wider, so it reads as a hanging cloud. */
+  breathe(origin, target, kind = "fire", spread = 1) {
     this.tmp.copy(target).sub(origin).normalize();
-    this.burst(this.fire, origin, this.tmp, 48, 18, 6);
+    if (kind === "venom") this.burst(this.venom, origin, this.tmp, 34, 11, 7 * spread);
+    else this.burst(this.fire, origin, this.tmp, 48, 18, 6 * spread);
   }
 
   bloodHit(origin, normal) {
@@ -85,11 +88,12 @@ export class Particles {
     this._step(this.ash, dt, 0, 90, true);
     this._step(this.ember, dt, 0.4, 28, true);
     this._step(this.fire, dt, -2.2, 80, false);
+    this._step(this.venom, dt, -0.6, 80, false, 0.35);
     this._step(this.blood, dt, -12, 40, false);
     this._step(this.chips, dt, -10, 30, false);
   }
 
-  _step(sys, dt, gravity, resetY, recycle) {
+  _step(sys, dt, gravity, resetY, recycle, decay = 0.85) {
     const p = sys.pos;
     const v = sys.vel;
     for (let i = 0; i < sys.count; i++) {
@@ -99,7 +103,7 @@ export class Particles {
       p[i3] += v[i3] * dt;
       p[i3 + 1] += v[i3 + 1] * dt;
       p[i3 + 2] += v[i3 + 2] * dt;
-      sys.life[i] -= dt * (recycle ? 0.02 : 0.85);
+      sys.life[i] -= dt * (recycle ? 0.02 : decay);
       if (recycle && (p[i3 + 1] < 0 || sys.life[i] <= 0)) {
         p[i3] = (Math.random() - 0.5) * 220;
         p[i3 + 1] = resetY;
@@ -114,5 +118,6 @@ export class Particles {
     this.ash.points.visible = true;
     this.ember.points.visible = tier !== "low";
     this.ash.points.material.size = tier === "low" ? 0.28 : 0.18;
+    this.ash.points.material.opacity = tier === "low" ? 0.4 : 0.55;
   }
 }
