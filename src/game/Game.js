@@ -65,19 +65,8 @@ export class Game {
     this.fx = new PostFX(this.renderer, this.scene, this.camera);
     this.demo = new DemoDirector(this.player, this.weapon);
 
-    this.world.setQuality(this.perf.tier);
-    this.particles.setQuality(this.perf.tier);
-    this.fx.setQuality(this.perf.tier);
-    this.hunt.setQuality(this.perf.tier);
-    this.perf.onChange((tier) => {
-      this.world.setQuality(tier);
-      this.particles.setQuality(tier);
-      this.fx.setQuality(tier);
-      this.hunt.setQuality(tier);
-      if (tier === "low") this.renderer.setPixelRatio(1);
-      else if (tier === "medium") this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
-      else this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
-    });
+    this._applyQuality(this.perf.tier);
+    this.perf.onChange((tier) => this._applyQuality(tier));
 
     const flight = Number(new URLSearchParams(location.search).get("flight"));
     await this.hunt.begin(Number.isFinite(flight) ? flight - 1 : 0);
@@ -107,9 +96,21 @@ export class Game {
     this.fx.resize(w, h);
   }
 
+  _applyQuality(tier) {
+    this.world.setQuality(tier);
+    this.particles.setQuality(tier);
+    this.fx.setQuality(tier);
+    this.hunt.setQuality(tier);
+    // Shading fewer pixels is the cheapest thing a struggling machine can do,
+    // so the lower tiers render below native and let the canvas upscale.
+    const ratio = Math.min(devicePixelRatio, 1.75) * CONFIG.quality.renderScale[tier];
+    this.renderer.setPixelRatio(ratio);
+    this.fx.setPixelRatio(ratio);
+  }
+
   tick() {
     const dt = Math.min(this.clock.getDelta(), 0.05);
-    this.perf.frame(dt);
+    this.perf.frame();
 
     const focusForDemo = this.hunt.focus(this.player.position);
     this.demo.update(dt, focusForDemo?.dragon.root.position ?? null);

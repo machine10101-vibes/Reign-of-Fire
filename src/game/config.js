@@ -43,5 +43,7 @@ export const CONFIG = {
     targetFps: 60,
     particleAsh: 900,
     particleEmber: 220,
+    // Fraction of native resolution each tier rasterises at.
+    renderScale: { low: 0.55, medium: 0.78, high: 1, cinematic: 1 },
   },
 };
