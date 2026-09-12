@@ -331,6 +331,11 @@ h1 {
   text-align: left;
   font-size: 11px;
   letter-spacing: 0.1em;
+  /* The title art behind this panel is busy enough to swallow 11px type. */
+  padding: 10px 18px;
+  background: linear-gradient(180deg, rgba(10, 7, 6, 0.78), rgba(10, 7, 6, 0.58));
+  border: 1px solid rgba(201, 184, 166, 0.16);
+  backdrop-filter: blur(3px);
 }
 
 .codex-row {
@@ -348,7 +353,7 @@ h1 {
 }
 
 .codex-epithet {
-  opacity: 0.6;
+  opacity: 0.78;
   font-style: italic;
 }
 

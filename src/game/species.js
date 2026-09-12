@@ -278,7 +278,7 @@ export const SPECIES = {
   pale_stalker: {
     id: "pale_stalker",
     name: "Pale Stalker",
-    epithet: "Vylkros",
+    epithet: "Silent Ambusher",
     tier: 3,
     bounty: 750,
     codex:
