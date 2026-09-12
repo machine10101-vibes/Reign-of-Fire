@@ -28,6 +28,18 @@ The playable vertical slice must read as **Unreal Engine 5 grit**, not fantasy i
   shadows lifted toward brown, highlights pulled to amber, saturation held back
   slightly so emissive lava stays the brightest thing in frame. Grain is
   luminance-weighted into the shadows the way film stock behaves.
+- **Order:** bloom and the motion-trail afterimage run on the linear HDR buffer;
+  the grade, vignette, dispersion and grain run *after* tone mapping. Grading
+  linear values with display-referred thresholds is what turns this palette into
+  grainy brown mud — mid grey is 0.2 in linear space, so highlight gain never
+  engages and shadow grain becomes an enormous relative perturbation.
+- **Emissive discipline:** nothing may out-radiate its own albedo. Terrain lava
+  and creature grout are both gated on their crack masks, and heat pools in
+  bands rather than covering a whole surface. A flat emissive term over rock or
+  hide erases every bit of texture detail underneath it.
+- **Depth:** two overlapping bands of fogged massifs sit at 300–470m. At that
+  range exponential fog takes almost all of their shading, which is the point —
+  they are silhouettes layered against the burning sky, not modelled mountains.
 
 ## Creature language
 
@@ -46,8 +58,12 @@ Species read apart at silhouette distance first, colour second:
 | Cinderwyrm | Widest wingspan for its body, four short horns | Forge-hot, highest emissive |
 | Ashwrought | Baseline proportions, heavy spikes | Obsidian plates, molten capillary cracks |
 | Sulfurmaw | Longest neck, oversized head, no spikes | Yellow-green crust, toxic emissive |
-| Pale Stalker | Longest tail, four tall horns | Ash-bleached, cold blue eyes, almost no glow |
+| Pale Stalker | Longest tail, four tall horns | Ash-bleached cracked hide, cold blue eyes, almost no glow |
 | Basalt Tyrant | Squat and huge, six horns, short wings | Cooled columnar rock, matte, barely glows |
+
+Scale tiling is derived from body size, not left in UV space. Uniformly scaling
+the root is what gave the Basalt Tyrant plates four times the size of an
+Emberkin's and reduced its hide to a featureless tube.
 
 Weak points are shared: head 3.0×, neck 1.6×, body 1.0×, tail 0.7×, wings 0.55×.
 Bolts resolve against the highest multiplier first, so the skull is always
