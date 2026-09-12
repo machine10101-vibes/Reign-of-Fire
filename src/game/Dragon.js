@@ -32,21 +32,67 @@ function torsoGeometry(segments) {
 }
 
 /**
- * Membrane outline in shape space: +X spans outboard, +Y runs toward the
- * leading edge. The scalloped trailing edge is what reads as "bat wing"
- * rather than "flat triangle" in silhouette.
+ * Membrane in shape space: +X spans outboard, +Y runs toward the leading edge,
+ * +Z lifts out of plane. The scalloped trailing edge is what reads as "bat
+ * wing" rather than "flat triangle" in silhouette.
+ *
+ * Lofted as a grid between the two edges rather than triangulated as a flat
+ * outline. An outline has no interior vertices to displace, so however the
+ * silhouette is shaped the surface stays perfectly planar and the largest
+ * panel on the beast reads as a plank.
  */
 function membraneGeometry(span) {
   const s = span;
-  const shape = new THREE.Shape();
-  shape.moveTo(0, 0);
-  shape.quadraticCurveTo(1.6 * s, 0.55, 3.1 * s, 0.36);
-  shape.quadraticCurveTo(4.0 * s, 0.22, 4.35 * s, -0.24);
-  shape.quadraticCurveTo(3.5 * s, -0.8, 2.7 * s, -1.2);
-  shape.quadraticCurveTo(2.1 * s, -0.82, 1.55 * s, -1.3);
-  shape.quadraticCurveTo(1.05 * s, -0.9, 0.5 * s, -0.98);
-  shape.quadraticCurveTo(0.2 * s, -0.5, 0, 0);
-  const geo = new THREE.ShapeGeometry(shape, 16);
+  const lead = new THREE.Path();
+  lead.moveTo(0, 0);
+  lead.quadraticCurveTo(1.6 * s, 0.55, 3.1 * s, 0.36);
+  lead.quadraticCurveTo(4.0 * s, 0.22, 4.35 * s, -0.24);
+
+  // Walked outboard, so it pairs up with the leading edge at equal parameter.
+  // The waypoints are the finger tips, which is why the bays fall between the
+  // bones laid down in `_buildWings`.
+  const trail = new THREE.Path();
+  trail.moveTo(0, 0);
+  trail.quadraticCurveTo(0.2 * s, -0.5, 0.5 * s, -0.98);
+  trail.quadraticCurveTo(1.05 * s, -0.9, 1.55 * s, -1.3);
+  trail.quadraticCurveTo(2.1 * s, -0.82, 2.7 * s, -1.2);
+  trail.quadraticCurveTo(3.5 * s, -0.8, 4.35 * s, -0.24);
+
+  const cols = 24;
+  const rows = 5;
+  const position = [];
+  const uv = [];
+  const index = [];
+  for (let i = 0; i <= cols; i++) {
+    const u = i / cols;
+    const front = lead.getPoint(u);
+    const back = trail.getPoint(u);
+    const chord = front.y - back.y;
+    for (let j = 0; j <= rows; j++) {
+      const v = j / rows;
+      const x = THREE.MathUtils.lerp(front.x, back.x, v);
+      const y = THREE.MathUtils.lerp(front.y, back.y, v);
+      // Slack sail: pinned along the arm and the trailing edge, bowed under
+      // between them, and flattening back out at the shoulder where the
+      // membrane is stretched tight across the body.
+      const across = Math.sin(v * Math.PI);
+      const along = Math.sin(Math.min(1, u * 1.3) * Math.PI) ** 0.6;
+      position.push(x, y, -0.34 * chord * across * along);
+      // Matched to the flat outline this replaces, which took its UVs straight
+      // from the 2D vertex positions, so the hide keeps its authored scale.
+      uv.push(x, y);
+      if (i < cols && j < rows) {
+        const a = i * (rows + 1) + j;
+        const b = a + rows + 1;
+        index.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(position, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(index);
   geo.applyMatrix4(
     new THREE.Matrix4().makeBasis(
       new THREE.Vector3(0, 0, 1),
@@ -54,6 +100,7 @@ function membraneGeometry(span) {
       new THREE.Vector3(0, 1, 0)
     )
   );
+  geo.computeVertexNormals();
   return geo;
 }
 
@@ -126,6 +173,29 @@ export class Dragon {
       transparent: true,
       opacity: 0.94,
     });
+
+    wing.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <lights_fragment_end>",
+        `#include <lights_fragment_end>
+         #if NUM_DIR_LIGHTS > 0
+           // Membrane translucency. A wing spread against a burning sky is lit
+           // through as well as on, and without it the largest surface on the
+           // beast goes to a flat dark board every time the sun is behind it —
+           // which, with a low raking key light and a quarry that circles
+           // overhead, is most of the time.
+           //
+           // Strongest face-on, where the light's path through the membrane is
+           // shortest, and multiplied by the hide colour so the thick vanes and
+           // finger bones stay silhouetted instead of lighting up with it.
+           vec3 sunDir = normalize(directionalLights[0].direction);
+           float behind = clamp(-dot(geometryNormal, sunDir), 0.0, 1.0);
+           float thinness = mix(0.35, 1.0, abs(dot(geometryNormal, geometryViewDir)));
+           reflectedLight.indirectDiffuse +=
+             directionalLights[0].color * diffuseColor.rgb * behind * thinness * 2.1;
+         #endif`
+      );
+    };
 
     const claw = new THREE.MeshStandardMaterial({
       color: 0x14100d,

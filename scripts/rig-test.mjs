@@ -25,7 +25,9 @@ const expect = (ok, message) => {
 };
 
 function wingTipWorld(dragon, index) {
-  const membrane = dragon.bones.wings[index].children.find((c) => c.geometry?.type === "ShapeGeometry");
+  // Found by what it is rather than by its geometry class, which is an
+  // implementation detail of how the membrane happens to be built.
+  const membrane = dragon.bones.wings[index].children.find((c) => c.userData.hit?.name === "wing");
   const pos = membrane.geometry.attributes.position;
   let best = null;
   let bestZ = -Infinity;
