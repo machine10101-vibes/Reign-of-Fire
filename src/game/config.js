@@ -38,6 +38,8 @@ export const CONFIG = {
     ],
     flightGap: 6,
     corpseLinger: 9,
+    // Long enough to read who killed you, short enough not to be a punishment.
+    downed: 4.6,
     mortarRadius: 9,
     cloudLife: 7,
     cloudRadius: 7,

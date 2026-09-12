@@ -78,6 +78,23 @@ export class Hunt {
     await this.nextFlight();
   }
 
+  /**
+   * Wipes the flight and spawns it again, for when the hunter is killed.
+   * Bounty and the kill tally stand: what is earned is earned.
+   */
+  async restartFlight() {
+    for (const e of this.entries) {
+      this.scene.remove(e.dragon.root);
+      e.dragon.dispose();
+    }
+    this.entries.length = 0;
+    this._clearT = 0;
+    this._invalidate();
+    // `nextFlight` increments, so step back to land on the same one.
+    this.flightIndex--;
+    await this.nextFlight();
+  }
+
   async nextFlight() {
     if (this._loading) return;
     this.flightIndex++;

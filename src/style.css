@@ -325,6 +325,11 @@ h1 {
   color: var(--ember);
 }
 
+#kill-log li.death {
+  color: #ff6a48;
+  opacity: 1;
+}
+
 #codex {
   margin: 22px auto 4px;
   max-width: 460px;
@@ -419,4 +424,43 @@ h1 {
 #fps,
 #quality {
   opacity: 0.8;
+}
+
+#downed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(26, 5, 1, 0.88), rgba(3, 2, 2, 0.98) 68%);
+  text-align: center;
+  transition: opacity 0.45s;
+}
+
+#downed.hidden {
+  display: none;
+}
+
+#downed-title {
+  font-size: 34px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #e8c8a2;
+  text-shadow: 0 0 26px rgba(255, 90, 20, 0.55);
+}
+
+#downed-line {
+  font-size: 14px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #ff7a3c;
+}
+
+#downed-sub {
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  opacity: 0.6;
 }

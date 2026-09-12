@@ -34,6 +34,8 @@ export class HUD {
     this.heat = document.getElementById("heat");
     this.hud = document.getElementById("hud");
     this.title = document.getElementById("title-screen");
+    this.downed = document.getElementById("downed");
+    this.downedLine = document.getElementById("downed-line");
     this._species = null;
     this._threatKey = "";
   }
@@ -41,6 +43,13 @@ export class HUD {
   showGame() {
     this.title.classList.add("hidden");
     this.hud.classList.remove("hidden");
+  }
+
+  /** `null` clears the death overlay; a species name puts it up. */
+  showDowned(killedBy) {
+    if (!this.downed) return;
+    this.downed.classList.toggle("hidden", !killedBy);
+    if (killedBy) this.downedLine.textContent = `Killed by a ${killedBy}`;
   }
 
   setLoading(fraction) {

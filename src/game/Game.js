@@ -115,6 +115,9 @@ export class Game {
     const focusForDemo = this.hunt.focus(this.player.position);
     this.demo.update(dt, focusForDemo?.dragon.root.position ?? null);
 
+    if (this.downedFor > 0) this._goingDown(dt);
+    else if (this.player.health <= 0) this._goDown();
+
     const moving = this.player.update(dt);
     if (this.player.didStep) this.audio.step(this.player.sprint);
 
@@ -194,6 +197,44 @@ export class Game {
       heat: this.player.onFire > 0,
     });
     this.hunt.logDirty = false;
+  }
+
+  /**
+   * The hunter is killed. Without this the health bar simply emptied and play
+   * carried on, which left every aggression weight in the roster with nothing
+   * riding on it.
+   */
+  _goDown() {
+    // Whichever beast was committed, which is also the one the HUD has been
+    // naming; a mortar from something still circling is the rare miss.
+    const killer =
+      this.hunt.alive.find((e) => e.ai.state === "attack") ?? this.hunt.focus(this.player.position);
+    const name = killer?.spec.name ?? "dragon";
+    this.downedFor = CONFIG.hunt.downed;
+    this.hud.showDowned(name);
+    this.hunt.pushLog(`Killed by a ${name}`, "death");
+    this.audio.death();
+  }
+
+  _goingDown(dt) {
+    this.downedFor -= dt;
+    this.player.keys.clear();
+    this.player.fireHeld = false;
+    // The view drops as the hunter goes down.
+    this.player.pitch = THREE.MathUtils.damp(this.player.pitch, -0.62, 2.2, dt);
+    if (this.downedFor > 0) return;
+
+    this.downedFor = 0;
+    this.hud.showDowned(null);
+    this.player.health = 100;
+    this.player.onFire = 0;
+    this.player.pitch = -0.1;
+    this.player.velocity.set(0, 0, 0);
+    const camp = this.world.campCenter;
+    this.player.position.set(camp.x, this.world.heightAt(camp.x, camp.z) + CONFIG.player.eye, camp.z);
+    this.demo.anchor.copy(this.player.position);
+    this.weapon.bolts = this.weapon.max;
+    this.hunt.restartFlight();
   }
 
   /** One roar per attack commitment, so pitch tells you which species turned in. */

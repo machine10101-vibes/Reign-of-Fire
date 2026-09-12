@@ -23,6 +23,12 @@ export class DemoDirector {
   update(dt, dragonPos) {
     if (!this.enabled) return;
     this.t += dt;
+    // The attract loop is a showreel, not a playthrough: the director's hunter
+    // mends what it takes so an unattended demo does not spend its second half
+    // on a death screen. Real play has no such allowance.
+    if (this.player.health < 40) {
+      this.player.health = Math.min(100, this.player.health + 24 * dt);
+    }
     this._weave();
     if (this.sweep && this.t < SWEEP_TIME) {
       this._surveyRidge(dt);
