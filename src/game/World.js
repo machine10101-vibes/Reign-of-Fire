@@ -1,20 +1,45 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { CONFIG } from "./config.js";
 import { fbm, ridge } from "./utils/noise.js";
-import { standardFrom } from "./assets.js";
+import { standardFrom, setRepeat } from "./assets.js";
+
+const SPAWN = new THREE.Vector2(2, 46);
+
+function transformed(geo, { pos = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1] } = {}) {
+  const clone = geo.clone();
+  clone.applyMatrix4(
+    new THREE.Matrix4().compose(
+      new THREE.Vector3(...pos),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)),
+      new THREE.Vector3(...scale)
+    )
+  );
+  return clone;
+}
 
 export class World {
-  constructor(scene, textures) {
+  constructor(scene, textures, renderer) {
     this.scene = scene;
+    this.renderer = renderer;
     this.size = CONFIG.worldSize;
     this.segments = CONFIG.terrainSegments;
     this.heights = new Float32Array((this.segments + 1) * (this.segments + 1));
     this.group = new THREE.Group();
+    this.props = [];
+    this.lavaMats = [];
     scene.add(this.group);
     this._buildSky(textures);
     this._buildTerrain(textures);
-    this._buildRocks(textures);
     this._buildLighting();
+    this._buildVolcano(textures);
+    this._buildRocks(textures);
+    this._buildSpires(textures);
+    this._buildDeadTrees(textures);
+    this._buildBonePiles(textures);
+    this._buildRuins(textures);
+    this._buildLavaPools(textures);
+    this._buildCamp(textures);
     this._buildAshColumns();
   }
 
@@ -38,8 +63,55 @@ export class World {
     return THREE.MathUtils.lerp(h00 * (1 - tx) + h10 * tx, h01 * (1 - tx) + h11 * tx, tz);
   }
 
+  /** Rough surface steepness at a point, used to keep props off cliff faces. */
+  slopeAt(x, z) {
+    const d = 2.5;
+    const dx = this.heightAt(x + d, z) - this.heightAt(x - d, z);
+    const dz = this.heightAt(x, z + d) - this.heightAt(x, z - d);
+    return Math.hypot(dx, dz) / (2 * d);
+  }
+
+  /**
+   * Poisson-ish scatter: reject samples that are too steep, too close to the
+   * hunter's camp, or outside the requested elevation band.
+   */
+  _scatter(count, { minR = 20, maxR = 130, slopeMax = 1.2, band = [-Infinity, Infinity], clear = 18, spacing = 0 } = {}) {
+    const out = [];
+    let guard = 0;
+    while (out.length < count && guard < count * 40) {
+      guard++;
+      const a = Math.random() * Math.PI * 2;
+      const r = minR + Math.random() * (maxR - minR);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r - 8;
+      if (Math.hypot(x - SPAWN.x, z - SPAWN.y) < clear) continue;
+      const y = this.heightAt(x, z);
+      if (y < band[0] || y > band[1]) continue;
+      if (this.slopeAt(x, z) > slopeMax) continue;
+      if (spacing && out.some((p) => Math.hypot(p.x - x, p.z - z) < spacing)) continue;
+      out.push({ x, y, z });
+    }
+    return out;
+  }
+
+  _instance(geo, mat, placements, place) {
+    const mesh = new THREE.InstancedMesh(geo, mat, placements.length);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const dummy = new THREE.Object3D();
+    placements.forEach((p, i) => {
+      place(dummy, p, i);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    this.group.add(mesh);
+    this.props.push(mesh);
+    return mesh;
+  }
+
   _buildSky(textures) {
-    const geo = new THREE.SphereGeometry(420, 32, 20);
+    const geo = new THREE.SphereGeometry(440, 40, 24);
     const mat = new THREE.MeshBasicMaterial({
       map: textures.sky,
       side: THREE.BackSide,
@@ -48,6 +120,20 @@ export class World {
     });
     this.sky = new THREE.Mesh(geo, mat);
     this.group.add(this.sky);
+
+    // Image-based lighting from the same ash storm the sky dome shows, so metal
+    // and wet rock pick up the real horizon instead of a flat grey cube.
+    if (this.renderer) {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      pmrem.compileEquirectangularShader();
+      const equirect = textures.sky.clone();
+      equirect.mapping = THREE.EquirectangularReflectionMapping;
+      equirect.needsUpdate = true;
+      this.envMap = pmrem.fromEquirectangular(equirect).texture;
+      this.scene.environment = this.envMap;
+      pmrem.dispose();
+      equirect.dispose();
+    }
   }
 
   _buildTerrain(textures) {
@@ -62,61 +148,65 @@ export class World {
       const z = pos.getZ(i);
       const mountain = fbm(x * 0.018, z * 0.018, 5);
       const ridges = ridge(x * 0.021, z * 0.02);
+      const detail = fbm(x * 0.09, z * 0.09, 3) * 1.4;
       const crater = Math.hypot(x, z + 18);
       const caldera = Math.exp(-((crater - 42) ** 2) / 380) * 3.2;
-      const h = mountain * 16.5 + ridges * 11.5 - caldera + 2.2;
+      const h = mountain * 16.5 + ridges * 11.5 + detail - caldera + 2.2;
       pos.setY(i, h);
       const ix = Math.round(((x + this.size / 2) / this.size) * n);
       const iz = Math.round(((z + this.size / 2) / this.size) * n);
       this.heights[iz * (n + 1) + ix] = h;
       uvs.setXY(i, x * 0.045, z * 0.045);
+      // Ash bleaches the peaks; the low ground keeps its molten tint.
       const lava = THREE.MathUtils.smoothstep(5.4, 2.2, h);
-      colors[i * 3] = 1;
-      colors[i * 3 + 1] = 1 - lava * 0.55;
-      colors[i * 3 + 2] = 1 - lava * 0.7;
+      const ash = THREE.MathUtils.smoothstep(16, 26, h);
+      colors[i * 3] = 1 - ash * 0.1;
+      colors[i * 3 + 1] = 1 - lava * 0.55 - ash * 0.04;
+      colors[i * 3 + 2] = 1 - lava * 0.7 - ash * 0.02;
     }
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute("uv2", geo.attributes.uv.clone());
     geo.computeVertexNormals();
 
-    const pack = textures.terrain_rock;
-    pack.albedo.repeat.set(14, 14);
-    pack.normal.repeat.set(14, 14);
-    pack.roughness.repeat.set(14, 14);
-    pack.ao.repeat.set(14, 14);
-    pack.emissive.repeat.set(14, 14);
-
+    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 16, 16);
     const mat = standardFrom(pack, {
       vertexColors: true,
       metalness: 0.04,
-      roughness: 0.78,
+      roughness: 0.8,
       emissive: new THREE.Color(1.0, 0.18, 0.03),
       emissiveIntensity: 0.55,
-      normalScale: new THREE.Vector2(1.4, 1.4),
+      normalScale: new THREE.Vector2(1.5, 1.5),
+      envMapIntensity: 0.35,
     });
 
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = { value: 0 };
       this._terrainShader = shader;
-      shader.vertexShader = `
-        varying float vWorldY;
-        ${shader.vertexShader}
-      `.replace(
+      shader.vertexShader = `varying float vWorldY;\n${shader.vertexShader}`.replace(
         "#include <begin_vertex>",
         `#include <begin_vertex>
          vWorldY = position.y;`
       );
-      shader.fragmentShader = `
-        uniform float uTime;
-        varying float vWorldY;
-        ${shader.fragmentShader}
-      `.replace(
-        "#include <emissivemap_fragment>",
-        `#include <emissivemap_fragment>
-         float lava = 1.0 - smoothstep(2.4, 6.8, vWorldY);
-         float pulse = 0.65 + 0.35 * sin(uTime * 1.7 + vWorldY * 0.4);
-         totalEmissiveRadiance += vec3(1.0, 0.22, 0.04) * lava * pulse * 0.55;`
-      );
+      shader.fragmentShader = `uniform float uTime;\nvarying float vWorldY;\n${shader.fragmentShader}`
+        // A second high-frequency tap of the same albedo keeps the ground from
+        // going soft under the player's feet without shipping a 4K texture.
+        .replace(
+          "#include <map_fragment>",
+          `#include <map_fragment>
+           vec4 detailTex = texture2D(map, vMapUv * 8.0);
+           diffuseColor.rgb *= mix(vec3(1.0), detailTex.rgb * 1.85, 0.42);`
+        )
+        .replace(
+          "#include <roughnessmap_fragment>",
+          `#include <roughnessmap_fragment>
+           roughnessFactor *= mix(1.0, texture2D(roughnessMap, vRoughnessMapUv * 8.0).g * 1.7, 0.35);`
+        )
+        .replace(
+          "#include <emissivemap_fragment>",
+          `#include <emissivemap_fragment>
+           float lava = 1.0 - smoothstep(2.4, 6.8, vWorldY);
+           float pulse = 0.65 + 0.35 * sin(uTime * 1.7 + vWorldY * 0.4);
+           totalEmissiveRadiance += vec3(1.0, 0.22, 0.04) * lava * pulse * 0.55;`
+        );
     };
 
     this.terrain = new THREE.Mesh(geo, mat);
@@ -125,103 +215,385 @@ export class World {
     this.group.add(this.terrain);
   }
 
+  _buildVolcano(textures) {
+    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 10, 10);
+    const mat = standardFrom(pack, {
+      metalness: 0.02,
+      roughness: 0.92,
+      emissive: new THREE.Color(0.55, 0.08, 0.01),
+      emissiveIntensity: 0.25,
+      envMapIntensity: 0.25,
+    });
+    const cone = new THREE.ConeGeometry(140, 118, 28, 4, true);
+    this.volcano = new THREE.Mesh(cone, mat);
+    this.volcano.position.set(-120, 10, -250);
+    this.group.add(this.volcano);
+
+    const caldera = new THREE.Mesh(
+      new THREE.CircleGeometry(26, 24),
+      new THREE.MeshBasicMaterial({ color: 0xff5512, fog: false })
+    );
+    caldera.rotation.x = -Math.PI / 2;
+    caldera.position.set(-120, 68, -250);
+    this.group.add(caldera);
+    this.calderaGlow = caldera;
+
+    const plume = new THREE.Mesh(
+      new THREE.CylinderGeometry(24, 60, 200, 14, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0x3a3029,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        fog: false,
+      })
+    );
+    plume.position.set(-120, 165, -250);
+    this.group.add(plume);
+    this.plume = plume;
+  }
+
   _buildRocks(textures) {
-    const geo = new THREE.IcosahedronGeometry(1, 1);
-    const mat = standardFrom(textures.terrain_rock, {
+    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 2.2, 2.2);
+    const mat = standardFrom(pack, {
       roughness: 0.9,
       metalness: 0.03,
       emissive: new THREE.Color(0.4, 0.05, 0.01),
       emissiveIntensity: 0.2,
+      envMapIntensity: 0.3,
     });
-    const count = 90;
-    this.rocks = new THREE.InstancedMesh(geo, mat, count);
-    this.rocks.castShadow = true;
-    this.rocks.receiveShadow = true;
-    const dummy = new THREE.Object3D();
-    let placed = 0;
-    let guard = 0;
-    while (placed < count && guard < 800) {
-      guard++;
-      const a = Math.random() * Math.PI * 2;
-      const r = 22 + Math.random() * 110;
-      const x = Math.cos(a) * r + (Math.random() - 0.5) * 10;
-      const z = Math.sin(a) * r + (Math.random() - 0.5) * 10;
-      if (Math.hypot(x - 2, z - 46) < 18) continue;
-      const y = this.heightAt(x, z);
-      dummy.position.set(x, y + 0.4, z);
-      dummy.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.3);
-      const s = 0.9 + Math.random() * 2.4;
-      dummy.scale.set(s * (0.7 + Math.random() * 0.5), s * (0.8 + Math.random() * 0.5), s * (0.7 + Math.random() * 0.5));
-      dummy.updateMatrix();
-      this.rocks.setMatrixAt(placed, dummy.matrix);
-      placed++;
+    const geo = new THREE.IcosahedronGeometry(1, 1);
+    // Break the sphere so instances read as fractured basalt, not pebbles.
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const s = 0.78 + fbm(p.getX(i) * 2.2 + 11, p.getZ(i) * 2.2 + 7, 3) * 0.7;
+      p.setXYZ(i, p.getX(i) * s, p.getY(i) * s, p.getZ(i) * s);
     }
-    this.group.add(this.rocks);
+    geo.computeVertexNormals();
+
+    const spots = this._scatter(130, { minR: 22, maxR: 132, slopeMax: 2.4, clear: 16 });
+    this.rocks = this._instance(geo, mat, spots, (d, p) => {
+      d.position.set(p.x, p.y + 0.3, p.z);
+      d.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.4);
+      const s = 0.9 + Math.random() * 2.6;
+      d.scale.set(s * (0.7 + Math.random() * 0.6), s * (0.75 + Math.random() * 0.6), s * (0.7 + Math.random() * 0.6));
+    });
+  }
+
+  _buildSpires(textures) {
+    const pack = setRepeat(textures.pack("obsidian", { clone: true }), 1.4, 2.6);
+    const mat = standardFrom(pack, {
+      roughness: 0.16,
+      metalness: 0.4,
+      emissive: new THREE.Color(0.8, 0.12, 0.02),
+      emissiveIntensity: 0.5,
+      envMapIntensity: 1.1,
+    });
+    const geo = mergeGeometries([
+      transformed(new THREE.ConeGeometry(1, 6, 5), { pos: [0, 3, 0] }),
+      transformed(new THREE.ConeGeometry(0.55, 3.4, 5), { pos: [0.9, 1.7, 0.3], rot: [0.16, 0.7, 0.22] }),
+      transformed(new THREE.ConeGeometry(0.4, 2.2, 5), { pos: [-0.75, 1.1, -0.5], rot: [-0.2, 0.3, -0.28] }),
+    ]);
+    const spots = this._scatter(34, { minR: 26, maxR: 128, slopeMax: 1.6, clear: 22, spacing: 12 });
+    this.spires = this._instance(geo, mat, spots, (d, p) => {
+      d.position.set(p.x, p.y - 0.4, p.z);
+      d.rotation.set((Math.random() - 0.5) * 0.22, Math.random() * Math.PI, (Math.random() - 0.5) * 0.22);
+      const s = 0.8 + Math.random() * 1.9;
+      d.scale.set(s, s * (0.8 + Math.random() * 1.1), s);
+    });
+  }
+
+  _buildDeadTrees(textures) {
+    const pack = setRepeat(textures.pack("burnt_bark", { clone: true }), 1, 3);
+    const mat = standardFrom(pack, {
+      roughness: 0.95,
+      metalness: 0.0,
+      emissive: new THREE.Color(0.35, 0.04, 0.0),
+      emissiveIntensity: 0.14,
+      envMapIntensity: 0.2,
+    });
+    const parts = [transformed(new THREE.CylinderGeometry(0.22, 0.52, 7.5, 7), { pos: [0, 3.7, 0] })];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.4;
+      const len = 2.2 + Math.random() * 1.6;
+      const h = 3.4 + i * 0.7;
+      parts.push(
+        transformed(new THREE.CylinderGeometry(0.05, 0.14, len, 5), {
+          pos: [Math.cos(a) * len * 0.36, h, Math.sin(a) * len * 0.36],
+          rot: [Math.sin(a) * 1.0, 0, -Math.cos(a) * 1.0],
+        })
+      );
+    }
+    const geo = mergeGeometries(parts);
+    const spots = this._scatter(56, { minR: 24, maxR: 126, slopeMax: 0.85, band: [6, 24], clear: 14, spacing: 7 });
+    this.trees = this._instance(geo, mat, spots, (d, p) => {
+      d.position.set(p.x, p.y - 0.3, p.z);
+      d.rotation.set((Math.random() - 0.5) * 0.3, Math.random() * Math.PI, (Math.random() - 0.5) * 0.3);
+      const s = 0.7 + Math.random() * 0.9;
+      d.scale.set(s, s * (0.8 + Math.random() * 0.7), s);
+    });
+  }
+
+  _buildBonePiles(textures) {
+    const pack = setRepeat(textures.pack("bone", { clone: true }), 1.6, 1.6);
+    const mat = standardFrom(pack, {
+      roughness: 0.68,
+      metalness: 0.0,
+      envMapIntensity: 0.35,
+    });
+    const parts = [
+      transformed(new THREE.SphereGeometry(0.75, 12, 9), { pos: [1.6, 0.55, 0.2], scale: [1.5, 0.8, 0.85] }),
+      transformed(new THREE.ConeGeometry(0.34, 1.1, 8), { pos: [2.7, 0.5, 0.2], rot: [0, 0, -Math.PI / 2] }),
+    ];
+    // Ribcage: paired arcs walking back down the spine.
+    for (let i = 0; i < 6; i++) {
+      for (const side of [-1, 1]) {
+        parts.push(
+          transformed(new THREE.TorusGeometry(0.85, 0.07, 5, 10, Math.PI * 0.8), {
+            pos: [-i * 0.62, 0.45, 0.1 * side],
+            rot: [Math.PI / 2, 0.25 * side, 0.1],
+            scale: [1, 0.7 + i * 0.04, 1],
+          })
+        );
+      }
+    }
+    for (let i = 0; i < 7; i++) {
+      parts.push(
+        transformed(new THREE.CylinderGeometry(0.14, 0.16, 0.55, 6), {
+          pos: [-i * 0.6 + 0.4, 0.95, 0],
+          rot: [0, 0, Math.PI / 2],
+        })
+      );
+    }
+    const geo = mergeGeometries(parts);
+    const spots = this._scatter(16, { minR: 26, maxR: 118, slopeMax: 0.6, clear: 20, spacing: 26 });
+    this.bones = this._instance(geo, mat, spots, (d, p) => {
+      d.position.set(p.x, p.y, p.z);
+      d.rotation.set(0, Math.random() * Math.PI * 2, 0);
+      const s = 1.4 + Math.random() * 1.6;
+      d.scale.setScalar(s);
+    });
+  }
+
+  _buildRuins(textures) {
+    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 1.2, 2.4);
+    const mat = standardFrom(pack, {
+      roughness: 0.84,
+      metalness: 0.02,
+      envMapIntensity: 0.3,
+    });
+    const parts = [];
+    // A toppled basalt colonnade: columnar hex prisms, snapped at different heights.
+    for (let i = 0; i < 7; i++) {
+      const h = 2.2 + Math.random() * 6;
+      parts.push(
+        transformed(new THREE.CylinderGeometry(0.62, 0.68, h, 6), {
+          pos: [i * 1.5 - 4.5, h / 2, Math.sin(i * 1.7) * 0.9],
+          rot: [0, i * 0.4, (Math.random() - 0.5) * 0.12],
+        })
+      );
+    }
+    parts.push(
+      transformed(new THREE.CylinderGeometry(0.6, 0.6, 6, 6), {
+        pos: [2.4, 0.7, 3.2],
+        rot: [Math.PI / 2.1, 0.4, 0],
+      })
+    );
+    const geo = mergeGeometries(parts);
+    const spots = this._scatter(9, { minR: 34, maxR: 120, slopeMax: 0.55, clear: 24, spacing: 34 });
+    this.ruins = this._instance(geo, mat, spots, (d, p) => {
+      d.position.set(p.x, p.y - 0.4, p.z);
+      d.rotation.set(0, Math.random() * Math.PI * 2, 0);
+      const s = 1.1 + Math.random() * 0.8;
+      d.scale.setScalar(s);
+    });
+  }
+
+  _buildLavaPools(textures) {
+    const pack = setRepeat(textures.pack("lava", { clone: true }), 2.4, 2.4);
+    const spots = this._scatter(14, { minR: 22, maxR: 122, slopeMax: 0.34, band: [1, 7.5], clear: 22, spacing: 20 });
+    this.lavaLights = [];
+    spots.forEach((p, i) => {
+      const mat = standardFrom(pack, {
+        roughness: 0.42,
+        metalness: 0.0,
+        emissive: new THREE.Color(1.5, 0.4, 0.05),
+        emissiveIntensity: 2.6,
+        envMapIntensity: 0.1,
+      });
+      this.lavaMats.push(mat);
+      const radius = 4 + Math.random() * 7;
+      const geo = new THREE.CircleGeometry(radius, 18);
+      // Ripple the rim so pools follow the ground instead of floating flat.
+      const vp = geo.attributes.position;
+      for (let k = 0; k < vp.count; k++) {
+        const r = Math.hypot(vp.getX(k), vp.getY(k));
+        if (r > 0.1) {
+          const wob = 0.78 + fbm(vp.getX(k) * 0.6 + i, vp.getY(k) * 0.6, 3) * 0.55;
+          vp.setXY(k, vp.getX(k) * wob, vp.getY(k) * wob);
+        }
+      }
+      geo.computeVertexNormals();
+      const pool = new THREE.Mesh(geo, mat);
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(p.x, p.y + 0.22, p.z);
+      this.group.add(pool);
+      this.props.push(pool);
+
+      if (i < 5) {
+        const light = new THREE.PointLight(0xff4a10, 30, radius * 6, 1.8);
+        light.position.set(p.x, p.y + 2.2, p.z);
+        this.group.add(light);
+        this.lavaLights.push(light);
+      }
+    });
+  }
+
+  /** The hunter's camp doubles as the spawn landmark so the player can orient. */
+  _buildCamp(textures) {
+    const wood = standardFrom(setRepeat(textures.pack("weapon_wood", { clone: true }), 1, 2), {
+      roughness: 0.86,
+      metalness: 0.0,
+      envMapIntensity: 0.25,
+    });
+    const hide = standardFrom(setRepeat(textures.pack("leather_glove", { clone: true }), 2, 2), {
+      roughness: 0.78,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+      envMapIntensity: 0.25,
+    });
+    const camp = new THREE.Group();
+    const ground = this.heightAt(SPAWN.x, SPAWN.y);
+    camp.position.set(SPAWN.x, ground, SPAWN.y);
+    this.group.add(camp);
+
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 2.6, 6), wood);
+      stake.position.set(Math.cos(a) * 6.5, 1.1, Math.sin(a) * 6.5);
+      stake.rotation.z = Math.cos(a) * 0.16;
+      stake.rotation.x = Math.sin(a) * 0.16;
+      stake.castShadow = true;
+      camp.add(stake);
+      // Every stake carries a trophy skull from an earlier hunt.
+      const skull = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), hide);
+      skull.position.set(Math.cos(a) * 6.5, 2.5, Math.sin(a) * 6.5);
+      skull.scale.set(1.3, 0.9, 0.9);
+      camp.add(skull);
+    }
+
+    const tarp = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.6, 4, 1, true), hide);
+    tarp.position.set(-3.4, 1.3, -2.2);
+    tarp.rotation.y = 0.6;
+    tarp.castShadow = true;
+    camp.add(tarp);
+
+    const fire = new THREE.Group();
+    fire.position.set(1.6, 0, 1.4);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 1.5, 6), wood);
+      log.position.set(Math.cos(a) * 0.35, 0.5, Math.sin(a) * 0.35);
+      log.rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9);
+      fire.add(log);
+    }
+    const coals = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff7a22 })
+    );
+    coals.position.y = 0.22;
+    coals.scale.y = 0.4;
+    fire.add(coals);
+    this.campFire = new THREE.PointLight(0xff8a33, 22, 26, 1.9);
+    this.campFire.position.set(0, 1.1, 0);
+    this.campFire.castShadow = false;
+    fire.add(this.campFire);
+    camp.add(fire);
+    this.campGroup = camp;
   }
 
   _buildLighting() {
-    this.scene.fog = new THREE.FogExp2(0x1a140f, 0.0068);
+    this.scene.fog = new THREE.FogExp2(0x1b1510, 0.0062);
     this.scene.background = new THREE.Color(0x120e0c);
 
-    this.hemi = new THREE.HemisphereLight(0x8a6a55, 0x1a0a04, 0.95);
+    this.hemi = new THREE.HemisphereLight(0x8a6a55, 0x24100a, 0.7);
     this.group.add(this.hemi);
 
-    this.sun = new THREE.DirectionalLight(0xff9a55, 2.35);
-    this.sun.position.set(-70, 48, 30);
+    // Low, raking key light: long shadows are what sell the ridge as volcanic.
+    this.sun = new THREE.DirectionalLight(0xffa561, 2.5);
+    this.sun.position.set(-78, 40, 34);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.camera.near = 4;
-    this.sun.shadow.camera.far = 260;
-    this.sun.shadow.camera.left = -90;
-    this.sun.shadow.camera.right = 90;
-    this.sun.shadow.camera.top = 90;
-    this.sun.shadow.camera.bottom = -90;
-    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.camera.far = 300;
+    this.sun.shadow.camera.left = -110;
+    this.sun.shadow.camera.right = 110;
+    this.sun.shadow.camera.top = 110;
+    this.sun.shadow.camera.bottom = -110;
+    this.sun.shadow.bias = -0.00035;
+    this.sun.shadow.normalBias = 0.028;
     this.group.add(this.sun);
 
-    this.rim = new THREE.DirectionalLight(0x3a4a66, 0.35);
-    this.rim.position.set(40, 20, -80);
+    this.rim = new THREE.DirectionalLight(0x4a5a78, 0.42);
+    this.rim.position.set(48, 24, -86);
     this.group.add(this.rim);
 
-    this.lavaLight = new THREE.PointLight(0xff4a10, 42, 80, 1.6);
-    this.lavaLight.position.set(6, 4, -8);
-    this.group.add(this.lavaLight);
-
-    this.ember = new THREE.PointLight(0xff6a1a, 18, 50, 2);
+    this.ember = new THREE.PointLight(0xff6a1a, 16, 54, 2);
     this.ember.position.set(-12, 8, 10);
     this.group.add(this.ember);
   }
 
   _buildAshColumns() {
-    const geo = new THREE.CylinderGeometry(6, 14, 48, 10, 1, true);
+    const geo = new THREE.CylinderGeometry(6, 16, 56, 12, 1, true);
     const mat = new THREE.MeshBasicMaterial({
       color: 0x2a241f,
       transparent: true,
-      opacity: 0.13,
+      opacity: 0.12,
       side: THREE.DoubleSide,
       depthWrite: false,
       fog: true,
     });
-    for (let i = 0; i < 5; i++) {
+    this.ashColumns = [];
+    for (let i = 0; i < 7; i++) {
       const mesh = new THREE.Mesh(geo, mat);
-      const a = (i / 5) * Math.PI * 2;
-      mesh.position.set(Math.cos(a) * 70, 34, Math.sin(a) * 64 - 20);
+      const a = (i / 7) * Math.PI * 2;
+      mesh.position.set(Math.cos(a) * 78, 36, Math.sin(a) * 72 - 20);
       mesh.rotation.z = (Math.random() - 0.5) * 0.2;
       this.group.add(mesh);
+      this.ashColumns.push(mesh);
     }
   }
 
   update(t) {
     if (this._terrainShader) this._terrainShader.uniforms.uTime.value = t;
-    this.lavaLight.intensity = 34 + Math.sin(t * 1.8) * 8;
+    const pulse = 2.3 + Math.sin(t * 1.6) * 0.5;
+    for (let i = 0; i < this.lavaMats.length; i++) {
+      this.lavaMats[i].emissiveIntensity = pulse + Math.sin(t * 2.1 + i) * 0.35;
+    }
+    for (let i = 0; i < this.lavaLights.length; i++) {
+      this.lavaLights[i].intensity = 26 + Math.sin(t * 1.8 + i * 1.3) * 9;
+    }
+    if (this.campFire) this.campFire.intensity = 19 + Math.sin(t * 9.3) * 4 + Math.sin(t * 3.1) * 3;
+    if (this.calderaGlow) this.calderaGlow.material.color.setRGB(1, 0.3 + Math.sin(t * 0.9) * 0.08, 0.06);
+    if (this.plume) this.plume.rotation.y = t * 0.012;
     this.sky.rotation.y = t * 0.003;
   }
 
   setQuality(tier) {
-    const map = { cinematic: 2048, high: 1024, medium: 512, low: 256 };
-    const size = map[tier] ?? 1024;
-    this.sun.shadow.mapSize.set(size, size);
+    const shadow = { cinematic: 2048, high: 1536, medium: 768, low: 512 };
+    this.sun.shadow.mapSize.set(shadow[tier] ?? 1024, shadow[tier] ?? 1024);
+    this.sun.shadow.map?.dispose();
+    this.sun.shadow.map = null;
     this.sun.castShadow = tier !== "low";
-    this.rocks.visible = tier !== "low";
+
+    const detail = tier === "low" ? 0 : tier === "medium" ? 1 : 2;
+    if (this.rocks) this.rocks.visible = detail >= 1;
+    if (this.spires) this.spires.visible = detail >= 1;
+    if (this.trees) this.trees.visible = detail >= 1;
+    if (this.bones) this.bones.visible = detail >= 2;
+    if (this.ruins) this.ruins.visible = detail >= 2;
+    for (const c of this.ashColumns ?? []) c.visible = detail >= 1;
+    for (const l of this.lavaLights ?? []) l.visible = detail >= 2;
   }
 }

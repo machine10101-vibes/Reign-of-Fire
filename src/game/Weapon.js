@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CONFIG } from "./config.js";
-import { standardFrom } from "./assets.js";
+import { standardFrom, setRepeat } from "./assets.js";
 
 export class Weapon {
   constructor(camera, textures) {
@@ -24,18 +24,20 @@ export class Weapon {
   }
 
   _build(textures) {
-    const metal = standardFrom(textures.weapon_metal, {
-      metalness: 0.88,
-      roughness: 0.32,
-      envMapIntensity: 0.7,
+    const metal = standardFrom(setRepeat(textures.pack("weapon_metal", { clone: true }), 2, 2), {
+      metalness: 0.9,
+      roughness: 0.3,
+      envMapIntensity: 1.25,
     });
-    const wood = standardFrom(textures.weapon_wood, {
+    const wood = standardFrom(setRepeat(textures.pack("weapon_wood", { clone: true }), 1, 3), {
       metalness: 0.02,
       roughness: 0.82,
+      envMapIntensity: 0.4,
     });
-    const leather = standardFrom(textures.leather_glove, {
+    const leather = standardFrom(setRepeat(textures.pack("leather_glove", { clone: true }), 3, 3), {
       metalness: 0,
-      roughness: 0.74,
+      roughness: 0.72,
+      envMapIntensity: 0.35,
     });
 
     this.group.position.set(0.22, -0.32, -0.62);
