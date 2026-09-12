@@ -149,7 +149,7 @@ export class Combat {
       let consumed = false;
 
       for (const box of boxes) {
-        if (!this._sphereHit(pos, box, 1.4)) continue;
+        if (!this._sphereHit(pos, box, 0.8)) continue;
         const info = box.userData.hit;
         const dragon = info.dragon;
         const dealt = dragon.takeDamage(CONFIG.weapon.damage * info.multiplier, info.name);

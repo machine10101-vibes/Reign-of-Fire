@@ -136,6 +136,10 @@ export class Dragon {
     this._buildWings(chest, body, wing, claw, build);
     this._buildLegs(chest, body, claw, girth);
 
+    // Bolts stop at the first bounding sphere they enter, and the torso sphere
+    // is wide enough to swallow the skull, so test the prize targets first.
+    this.hitboxes.sort((a, b) => b.userData.hit.multiplier - a.userData.hit.multiplier);
+
     this.root.rotation.y = -Math.PI / 2;
     this.glow = new THREE.PointLight(this.spec.look.glow, this.spec.look.glowIntensity, 52, 1.5);
     this.glow.position.set(0.6, 0, 0);
