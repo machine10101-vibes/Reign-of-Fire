@@ -11,7 +11,7 @@
 import * as THREE from "three";
 
 import { CONFIG } from "../src/game/config.js";
-import { Weapon } from "../src/game/Weapon.js";
+import { Weapon, sweep } from "../src/game/Weapon.js";
 
 const MAPS = ["albedo", "normal", "roughness", "metallic", "ao", "emissive"];
 
@@ -45,6 +45,37 @@ function stubViewmodel() {
       return out.copy(point);
     },
   };
+}
+
+// ------------------------------------------------------------- swept geometry
+
+// A straight tube is convex, so every face of it should point away from its
+// own centre. The first version of the winding was inverted, and with backface
+// culling that meant every limb, forearm and finger was being seen from the
+// inside — which on a tube a centimetre across reads as open guttering.
+{
+  const tube = sweep(
+    [
+      [0, 0, 0],
+      [0, 0, -0.2],
+      [0, 0, -0.4],
+    ],
+    { steps: 6, radial: 8, radius: () => 0.05 }
+  );
+  tube.computeBoundingBox();
+  const mid = tube.boundingBox.getCenter(new THREE.Vector3());
+  const pos = tube.attributes.position;
+  const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  let inward = 0;
+  for (let i = 0; i < tube.index.count; i += 3) {
+    a.fromBufferAttribute(pos, tube.index.getX(i));
+    b.fromBufferAttribute(pos, tube.index.getX(i + 1));
+    c.fromBufferAttribute(pos, tube.index.getX(i + 2));
+    const normal = b.clone().sub(a).cross(c.clone().sub(a));
+    const outward = a.clone().add(b).add(c).divideScalar(3).sub(mid);
+    if (normal.dot(outward) <= 0) inward++;
+  }
+  expect(inward === 0, `${inward} of ${tube.index.count / 3} swept faces are inside out`);
 }
 
 const viewmodel = stubViewmodel();
@@ -93,9 +124,20 @@ function separation(a, b) {
   return Math.sqrt(best);
 }
 
-for (const [name, arm] of [
-  ["right", weapon.rightArm],
-  ["left", weapon.leftArm],
+// The viewmodel's own lens, for the framing checks. The weapon is authored in
+// camera space, so an identity camera is the player's eye.
+const camera = new THREE.PerspectiveCamera(
+  CONFIG.viewmodel.fov,
+  16 / 9,
+  CONFIG.viewmodel.near,
+  CONFIG.viewmodel.far
+);
+camera.updateMatrixWorld(true);
+camera.updateProjectionMatrix();
+
+for (const [name, arm, side] of [
+  ["right", weapon.rightArm, 1],
+  ["left", weapon.leftArm, -1],
 ]) {
   const hand = arm.children[arm.children.length - 1];
   expect(Array.isArray(hand.userData.wrist), `${name} hand publishes no wrist anchor`);
@@ -104,6 +146,28 @@ for (const [name, arm] of [
   // built from, which both of them agree on whether or not it is right.
   const gap = separation(vertices(arm.children[0]), vertices(hand));
   expect(gap < 0.01 * CONFIG.viewmodel.scale, `${name} forearm stops ${mm(gap)} short of its hand`);
+
+  // A forearm has a length. The first pair were half a metre and three
+  // quarters of a metre long, which is why they read as scaffolding poles.
+  const elbow = new THREE.Vector3(...arm.userData.elbow).applyMatrix4(arm.matrixWorld);
+  const joint = new THREE.Vector3(...hand.userData.wrist).applyMatrix4(hand.matrixWorld);
+  const reach = elbow.distanceTo(joint) / CONFIG.viewmodel.scale;
+  expect(reach > 0.25 && reach < 0.4, `${name} arm is ${mm(reach)} long`);
+
+  // The elbow belongs off the bottom of the frame; an arm that ends inside it
+  // ends in a stump.
+  const seen = elbow.clone().project(camera);
+  expect(seen.y < -1 || seen.x * side > 1, `${name} elbow is inside the frame at ${seen.y.toFixed(2)}`);
+
+  // A hand whose fingers were stacked upside down met all of the above, so the
+  // index knuckle has to be demonstrably at the top of the handle and the
+  // wrist below it, where the arm comes up from.
+  const wrist = new THREE.Vector3(...hand.userData.wrist).applyMatrix4(hand.matrixWorld);
+  const index = new THREE.Vector3(...hand.userData.knuckle).applyMatrix4(hand.matrixWorld);
+  expect(
+    index.y > wrist.y + 0.05 * CONFIG.viewmodel.scale,
+    `${name} hand has its wrist ${mm(index.y - wrist.y)} above its index knuckle`
+  );
 
   // And the hand has to be on the handle, not floating beside it.
   const grip = name === "right" ? weapon.grip : weapon.foregrip;
@@ -117,35 +181,50 @@ for (const [name, arm] of [
   );
 }
 
+// The trigger finger is built from the trigger's real position, so it has to
+// land on it: a finger reaching a remembered offset is how the first version
+// ended up with a blade sticking ten centimetres out of the front of the hand.
+{
+  const trigger = new THREE.Vector3();
+  weapon.trigger.getWorldPosition(trigger);
+  const reach = separation(vertices(weapon.triggerFinger), [trigger]);
+  expect(reach < 0.02, `the index finger stops ${mm(reach)} from the trigger`);
+}
+
 // ------------------------------------------------------- string, bolt, channel
 
 weapon.update(1, {});
 weapon.group.updateMatrixWorld(true);
 expect(weapon.draw === 1, `weapon did not return to full draw, got ${weapon.draw}`);
 
-const serving = new THREE.Vector3();
-weapon.serving.getWorldPosition(serving);
-// The channel is the bolt group's own origin, which rides the shaft axis; its
-// bounding box is widened by the broadhead and the fletching.
-const channel = new THREE.Vector3();
-weapon.bolt.getWorldPosition(channel);
-const boltBox = new THREE.Box3().setFromObject(weapon.bolt);
+// Measured in the weapon's own frame. "Level with the channel" is a statement
+// about the weapon, and once it is pitched nose-down in the hand two points at
+// different range no longer share a height in camera space.
+const local = (object) => object.position.clone();
+const serving = local(weapon.serving);
+const channel = local(weapon.bolt);
 expect(
   Math.abs(serving.y - channel.y) < 0.01,
   `bowstring sits ${mm(Math.abs(serving.y - channel.y))} off the bolt channel`
 );
+// The bolt group's origin rides the shaft axis; its extent is what says where
+// the nock and the broadhead are.
+const boltBox = new THREE.Box3()
+  .setFromObject(weapon.bolt)
+  .applyMatrix4(new THREE.Matrix4().copy(weapon.group.matrixWorld).invert());
 // The string has to be behind the nock and close to it, or it is pushing air.
 expect(serving.z > boltBox.max.z, "bowstring is latched in front of the bolt's nock");
 expect(
   serving.z - boltBox.max.z < 0.05,
   `bowstring is latched ${mm(serving.z - boltBox.max.z)} behind the nock it pushes`
 );
-expect(boltBox.min.z < -0.6 * CONFIG.viewmodel.scale, "the bolt does not reach out past the limbs");
+expect(boltBox.min.z < -0.6, "the bolt does not reach out past the limbs");
 
 // Each half is a cylinder of unit length along -Z, so its far end is its own
 // scale; a slack string shows up here as an end that misses the serving.
 for (const { pivot, mesh } of weapon.stringSides) {
-  const tip = new THREE.Vector3(0, 0, -mesh.scale.z).applyMatrix4(pivot.matrixWorld);
+  pivot.updateMatrix();
+  const tip = new THREE.Vector3(0, 0, -mesh.scale.z).applyMatrix4(pivot.matrix);
   expect(tip.distanceTo(serving) < 0.01, `string half stops ${mm(tip.distanceTo(serving))} short of centre`);
 }
 
@@ -156,10 +235,7 @@ const { near, far } = CONFIG.viewmodel;
 expect(box.max.z < -near, `weapon reaches z=${box.max.z.toFixed(3)}, through the near plane at ${-near}`);
 expect(box.min.z > -far, `weapon reaches z=${box.min.z.toFixed(3)}, past the far plane at ${-far}`);
 
-// It must actually be in shot, and it must leave the reticle alone.
-const camera = new THREE.PerspectiveCamera(CONFIG.viewmodel.fov, 16 / 9, near, far);
-camera.updateMatrixWorld(true);
-camera.updateProjectionMatrix();
+// It must actually be in shot.
 const ndc = new THREE.Box2();
 const corner = new THREE.Vector3();
 for (let i = 0; i < 8; i++) {
@@ -175,6 +251,36 @@ expect(ndc.min.x < 1 && ndc.max.x > -1 && ndc.min.y < 1 && ndc.max.y > -1, "weap
 // Held at the hip on the right: the bulk of it belongs below and right of centre.
 expect(ndc.min.y < -0.2, `weapon does not reach the bottom of the frame, lowest y=${ndc.min.y.toFixed(2)}`);
 expect(ndc.max.x > 0.1, `weapon does not reach the right of the frame, highest x=${ndc.max.x.toFixed(2)}`);
+// And nothing of it over the reticle, which is the one part of the screen the
+// player is actually looking at.
+expect(ndc.max.y < 0.06, `weapon reaches the reticle, highest y=${ndc.max.y.toFixed(2)}`);
+
+/** Where a point in the weapon's own frame lands, as a fraction down the frame. */
+const down = (x, y, z) => {
+  const ndc = new THREE.Vector3(x, y, z).applyMatrix4(weapon.group.matrixWorld).project(camera);
+  return (1 - ndc.y) / 2;
+};
+// Both hands in shot. The whole reason for rebuilding them is that they were
+// below the bottom edge and the player could not see them at all.
+for (const [name, arm] of [
+  ["rear", weapon.rightArm],
+  ["front", weapon.leftArm],
+]) {
+  const hand = arm.children[arm.children.length - 1];
+  const seen = new THREE.Vector3().setFromMatrixPosition(hand.matrixWorld).project(camera);
+  const fraction = (1 - seen.y) / 2;
+  expect(fraction > 0.55 && fraction < 0.94, `${name} hand is ${fraction.toFixed(2)} down the frame`);
+  expect(Math.abs(seen.x) < 0.95, `${name} hand is off the side of the frame`);
+}
+// The prod clear of the reticle but not off the bottom, and both limb tips in
+// shot: a crossbow seen end-on is indistinguishable from a rifle.
+expect(down(0, 0.044, -0.45) > 0.56, "the prod crosses the reticle");
+for (const side of [-1, 1]) {
+  const tip = new THREE.Vector3(side * 0.335, 0.044, -0.452)
+    .applyMatrix4(weapon.group.matrixWorld)
+    .project(camera);
+  expect(Math.abs(tip.x) < 0.94, `the ${side < 0 ? "left" : "right"} limb tip is out of shot`);
+}
 
 // ------------------------------------------------------------ firing and reload
 
