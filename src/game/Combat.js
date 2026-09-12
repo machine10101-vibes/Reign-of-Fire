@@ -301,9 +301,11 @@ export class Combat {
       const dist = toPlayer.length();
       if (dist > stats.attackRange) continue;
       toPlayer.normalize();
-      dragon.headForward(_head);
-      const cone = 0.35 / (e.ai.breath.spread || 1);
-      if (_head.dot(toPlayer) > cone || dist < stats.attackRange * 0.3) {
+      // Tested against the same direction the flame is drawn along, so what
+      // burns you on screen is what burns you in the numbers.
+      _head.copy(e.ai.breath.aim);
+      const cone = Math.min(0.97, 0.82 / (e.ai.breath.spread || 1));
+      if (_head.dot(toPlayer) > cone || dist < stats.attackRange * 0.22) {
         player.applyDamage(stats.damage * dt);
         player.onFire = 0.6;
         player.addShake(0.04);

@@ -126,7 +126,7 @@ export class Game {
     for (const e of this.hunt.breathSources) {
       this.particles.breathe(
         e.dragon.mouthWorld(this._muzzle),
-        this.player.position,
+        e.ai.breathTarget(this._look),
         dt,
         e.ai.breath.kind,
         e.ai.breath.spread

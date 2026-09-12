@@ -29,6 +29,7 @@ const STYLE = {
 const _v = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 const _side = new THREE.Vector3();
+const _mouth = new THREE.Vector3();
 
 function noise(scale) {
   return (Math.random() - 0.5) * scale;
@@ -55,7 +56,7 @@ export class DragonAI {
     this.phase = "windup";
 
     this.breathKind = dragon.spec.mind.breath ?? "fire";
-    this.breath = { active: false, kind: this.breathKind, spread: 1 };
+    this.breath = { active: false, kind: this.breathKind, spread: 1, aim: new THREE.Vector3(0, 0, 1) };
     this.requests = [];
     this.melee = 0;
     this.charge = 0;
@@ -120,6 +121,31 @@ export class DragonAI {
 
     this._move(dt);
     this._pose(dt, ctx);
+    this._aimBreath(dt, ctx);
+  }
+
+  /**
+   * One direction the flame agrees on. The particles used to spray straight at
+   * the hunter while the damage cone was tested against the head's facing,
+   * which never aims at anything, so the fire visibly engulfed you and did
+   * nothing. Sweeping it at the beast's own turn rate is also what makes
+   * breaking sideways a real answer rather than a superstition.
+   */
+  _aimBreath(dt, ctx) {
+    if (!this.breath.active || !ctx?.playerPos) {
+      this.dragon.headForward(this.breath.aim);
+      return;
+    }
+    _v.subVectors(ctx.playerPos, this.dragon.mouthWorld(_mouth));
+    if (_v.lengthSq() < 1e-6) return;
+    this.breath.aim.lerp(_v.normalize(), 1 - Math.exp(-dt * this.stats.turnRate * 0.7)).normalize();
+  }
+
+  /** Where the flame is actually pointing, in world space. */
+  breathTarget(target = new THREE.Vector3()) {
+    return target
+      .copy(this.dragon.mouthWorld(_mouth))
+      .addScaledVector(this.breath.aim, this.stats.attackRange);
   }
 
   _enter(state) {
