@@ -5,6 +5,34 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { AfterimagePass } from "three/addons/postprocessing/AfterimagePass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { Pass } from "three/addons/postprocessing/Pass.js";
+
+/**
+ * Draws the viewmodel scene on top of the world with the depth buffer cleared,
+ * so the weapon can never be occluded by scenery however close the hunter
+ * stands to it.
+ *
+ * `RenderPass` has a `clearDepth` flag that looks like it would do this, but it
+ * clears before binding its own target, so what it wipes is whichever buffer
+ * the previous pass happened to leave attached. Doing it here in the right
+ * order is a few lines and does not depend on that.
+ */
+class ViewmodelPass extends Pass {
+  constructor(viewmodel) {
+    super();
+    this.viewmodel = viewmodel;
+    this.needsSwap = false;
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(this.renderToScreen ? null : readBuffer);
+    renderer.clearDepth();
+    renderer.render(this.viewmodel.scene, this.viewmodel.camera);
+    renderer.autoClear = autoClear;
+  }
+}
 
 const CompositeShader = {
   uniforms: {
@@ -75,10 +103,13 @@ const CompositeShader = {
 };
 
 export class PostFX {
-  constructor(renderer, scene, camera) {
+  constructor(renderer, scene, camera, viewmodel) {
     this.renderer = renderer;
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
+    // Ahead of bloom, so a muzzle flash blooms and the grade treats the weapon
+    // as part of the photograph rather than as an overlay pasted on top.
+    if (viewmodel) this.composer.addPass(new ViewmodelPass(viewmodel));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.55, 0.48);
     this.composer.addPass(this.bloom);
     this.after = new AfterimagePass(0.12);

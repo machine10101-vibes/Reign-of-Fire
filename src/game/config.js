@@ -31,6 +31,22 @@ export const CONFIG = {
     mass: 4.6,
     damage: 85,
   },
+  viewmodel: {
+    // Deliberately narrower than the world's 75. At the world's angle a
+    // metre-long weapon half a metre from the eye splays across the lower
+    // frame and its parallel edges skew visibly apart.
+    fov: 52,
+    near: 0.01,
+    far: 8,
+    // The weapon is modelled at true scale, but a real ballista shouldered at
+    // a real eye puts its butt plate ten centimetres from the cornea, where it
+    // fills a third of the screen. Every shooter shrinks the viewmodel a little
+    // for the same reason; this is that allowance, not a modelling error.
+    scale: 0.82,
+    // How far the weapon lags behind a fast turn, and the ceiling on that lag.
+    sway: 0.055,
+    swayMax: 0.085,
+  },
   hunt: {
     // Difficulty ramps by aggression and armour, not just by hit points.
     flights: [
