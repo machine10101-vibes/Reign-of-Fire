@@ -1,7 +1,9 @@
 export const CONFIG = {
   title: "Reign of Fire",
   worldSize: 280,
-  terrainSegments: 128,
+  // Just over a metre per quad, which is what it takes to resolve the
+  // fractured mid-scale relief in the height field rather than average it away.
+  terrainSegments: 256,
   player: {
     eye: 1.72,
     speed: 7.4,

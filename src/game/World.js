@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { CONFIG } from "./config.js";
-import { fbm, ridge } from "./utils/noise.js";
+import { fbm, ridge, noise2 } from "./utils/noise.js";
 import { standardFrom, setRepeat } from "./assets.js";
 
 const SPAWN = new THREE.Vector2(2, 46);
@@ -16,6 +16,41 @@ function transformed(geo, { pos = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1] 
     )
   );
   return clone;
+}
+
+/** Pushes a primitive's vertices about so it stops reading as a primitive. */
+function weathered(geo, amount, seed) {
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const dent = 1 - amount * fbm(x * 1.7 + seed, z * 1.7 - seed, 3);
+    pos.setXYZ(i, x * dent, y * (1 - amount * fbm(z * 1.4 - seed, y * 1.4 + seed, 2)), z * dent);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Fractal skyline height at one azimuth, sampled through cos/sin so the curve
+ * closes seamlessly on itself. Raised to a power because mountains meet the sky
+ * in crests, not in rolling hills.
+ */
+function skyline(angle, seed) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  let v = 0;
+  let total = 0;
+  let w = 1;
+  let f = 1.7;
+  for (let o = 0; o < 4; o++) {
+    v += w * noise2(c * f + seed, s * f + seed);
+    total += w;
+    w *= 0.52;
+    f *= 2.13;
+  }
+  return Math.pow(v / total, 1.7);
 }
 
 export class World {
@@ -149,10 +184,16 @@ export class World {
       const z = pos.getZ(i);
       const mountain = fbm(x * 0.018, z * 0.018, 5);
       const ridges = ridge(x * 0.021, z * 0.02);
-      const detail = fbm(x * 0.09, z * 0.09, 3) * 1.4;
+      // Broken relief in the three-to-ten metre band. The massif noise bottoms
+      // out around twenty metres, so without this the height field runs
+      // straight from those shapes down to the quad size and the smooth
+      // interpolation across the gap reads as sand dunes — which is exactly
+      // what it looked like, and no amount of normal mapping hides it.
+      const fracture = ridge(x * 0.17, z * 0.163) ** 2 * 2.7;
+      const rubble = fbm(x * 0.46, z * 0.46, 2) * 1.15;
       const crater = Math.hypot(x, z + 18);
       const caldera = Math.exp(-((crater - 42) ** 2) / 380) * 3.2;
-      const h = mountain * 16.5 + ridges * 11.5 + detail - caldera + 2.2;
+      const h = mountain * 16.5 + ridges * 11.5 + fracture + rubble - caldera + 1.4;
       pos.setY(i, h);
       const ix = Math.round(((x + this.size / 2) / this.size) * n);
       const iz = Math.round(((z + this.size / 2) / this.size) * n);
@@ -290,65 +331,91 @@ export class World {
   _buildSpires(textures) {
     const pack = setRepeat(textures.pack("obsidian", { clone: true }), 1.4, 2.6);
     const mat = standardFrom(pack, {
-      roughness: 0.16,
+      roughness: 0.24,
       metalness: 0.4,
       emissive: new THREE.Color(0.8, 0.12, 0.02),
       emissiveIntensity: 0.5,
       envMapIntensity: 1.1,
     });
+    // Sheared columns with flat, broken tops. These were five-sided needles,
+    // and three dozen of them scattered across the ridge read as a row of
+    // shark teeth rather than as an obsidian outcrop.
+    const blade = (base, top, height, sides) => new THREE.CylinderGeometry(top, base, height, sides);
     const geo = mergeGeometries([
-      transformed(new THREE.ConeGeometry(1, 6, 5), { pos: [0, 3, 0] }),
-      transformed(new THREE.ConeGeometry(0.55, 3.4, 5), { pos: [0.9, 1.7, 0.3], rot: [0.16, 0.7, 0.22] }),
-      transformed(new THREE.ConeGeometry(0.4, 2.2, 5), { pos: [-0.75, 1.1, -0.5], rot: [-0.2, 0.3, -0.28] }),
+      transformed(blade(1.0, 0.34, 5.4, 5), { pos: [0, 2.7, 0], rot: [0.06, 0.4, 0.08] }),
+      transformed(blade(0.62, 0.2, 3.6, 4), { pos: [1.05, 1.8, 0.35], rot: [0.1, 0.9, 0.26] }),
+      transformed(blade(0.5, 0.17, 2.4, 5), { pos: [-0.82, 1.2, -0.55], rot: [-0.14, 0.3, -0.3] }),
+      transformed(blade(0.42, 0.3, 1.3, 4), { pos: [0.3, 0.62, -1.0], rot: [0.2, 1.7, 0.14] }),
     ]);
-    const spots = this._scatter(34, { minR: 26, maxR: 128, slopeMax: 1.6, clear: 22, spacing: 12 });
+    const spots = this._scatter(26, { minR: 26, maxR: 128, slopeMax: 1.6, clear: 22, spacing: 14 });
     this.spires = this._instance(geo, mat, spots, (d, p) => {
       d.position.set(p.x, p.y - 0.4, p.z);
       d.rotation.set((Math.random() - 0.5) * 0.22, Math.random() * Math.PI, (Math.random() - 0.5) * 0.22);
-      const s = 0.8 + Math.random() * 1.9;
-      d.scale.set(s, s * (0.8 + Math.random() * 1.1), s);
+      const s = 0.7 + Math.random() * 1.3;
+      d.scale.set(s, s * (0.8 + Math.random() * 1.0), s);
     });
   }
 
   /**
-   * Ridges past the playable ground. Fog swallows nearly all their shading at
-   * this range, which is the point: they read as layered silhouettes against
-   * the burning sky instead of letting the terrain stop in mid-air.
+   * Ridges past the playable ground, so the terrain does not stop in mid-air.
+   *
+   * At this range the fog has taken all but about a tenth of their shading, so
+   * the outline is the only thing that reads — which is why these are skyline
+   * curtains and not geometry. A cone silhouettes as a triangle however much
+   * its flanks are displaced, and a ring of forty of them read as a row of
+   * tents pitched around the map.
    */
   _buildHorizon(textures) {
-    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 3, 3);
+    const pack = setRepeat(textures.pack("terrain_rock", { clone: true }), 26, 2);
     const mat = standardFrom(pack, {
       roughness: 0.95,
       metalness: 0,
       emissive: new THREE.Color(0.5, 0.07, 0.01),
-      emissiveIntensity: 0.1,
-      envMapIntensity: 0.18,
+      emissiveIntensity: 0.08,
+      envMapIntensity: 0.15,
+      side: THREE.DoubleSide,
     });
-    const geo = mergeGeometries([
-      transformed(new THREE.ConeGeometry(1, 1.1, 7), { pos: [0, 0.55, 0] }),
-      transformed(new THREE.ConeGeometry(0.78, 0.72, 6), { pos: [1.1, 0.36, 0.4], rot: [0, 0.6, 0.09] }),
-      transformed(new THREE.ConeGeometry(0.66, 0.5, 6), { pos: [-1.05, 0.25, -0.45], rot: [0, 0.3, -0.1] }),
-    ]);
-
-    const count = 40;
-    const mesh = new THREE.InstancedMesh(geo, mat, count);
-    const dummy = new THREE.Object3D();
-    for (let i = 0; i < count; i++) {
-      // Two heavily overlapping bands: no single massif should read as a shape,
-      // and the near band has to break the far one's outline.
-      const band = i % 2;
-      const angle = (i / count) * Math.PI * 4 + (Math.random() - 0.5) * 0.3;
-      const radius = (band ? 300 : 400) + Math.random() * 70;
-      dummy.position.set(Math.cos(angle) * radius, -30, Math.sin(angle) * radius);
-      dummy.rotation.set(0, Math.random() * Math.PI, 0);
-      const width = 110 + Math.random() * 90;
-      dummy.scale.set(width, (band ? 52 : 88) + Math.random() * 60, width * (0.7 + Math.random() * 0.5));
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
+    this.horizon = new THREE.Group();
+    // Three layers at increasing distance and height: the overlap between them
+    // is what gives the skyline depth once fog has flattened the shading.
+    for (const [radius, base, amp, seed] of [
+      [300, 14, 70, 3.7],
+      [382, 24, 104, 21.3],
+      [464, 32, 148, 48.9],
+    ]) {
+      this.horizon.add(this._ridgeCurtain(radius, base, amp, seed, mat));
     }
-    mesh.instanceMatrix.needsUpdate = true;
-    this.horizon = mesh;
-    this.group.add(mesh);
+    this.group.add(this.horizon);
+  }
+
+  /** One wrapping strip whose top edge follows a fractal skyline. */
+  _ridgeCurtain(radius, base, amp, seed, mat) {
+    const segments = 256;
+    const floor = -46;
+    const position = [];
+    const uv = [];
+    const index = [];
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      const top = base + amp * skyline(angle, seed);
+      position.push(c * radius, floor, s * radius, c * radius, top, s * radius);
+      uv.push(i / segments, 0, i / segments, (top - floor) / 90);
+      if (i < segments) {
+        const b = i * 2;
+        index.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(position, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(index);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    // It rings the whole world, so the bounding sphere is never a useful test.
+    mesh.frustumCulled = false;
+    return mesh;
   }
 
   _buildDeadTrees(textures) {
@@ -385,12 +452,18 @@ export class World {
   _buildBonePiles(textures) {
     const pack = setRepeat(textures.pack("bone", { clone: true }), 1.6, 1.6);
     const mat = standardFrom(pack, {
-      roughness: 0.68,
+      // Ash-caked, not museum-clean. Left glossy and bright, the cranium
+      // catches the sky and reads as a smooth pale egg on the slope.
+      color: new THREE.Color(0.62, 0.58, 0.54),
+      roughness: 0.86,
       metalness: 0.0,
-      envMapIntensity: 0.35,
+      envMapIntensity: 0.16,
     });
     const parts = [
-      transformed(new THREE.SphereGeometry(0.75, 12, 9), { pos: [1.6, 0.55, 0.2], scale: [1.5, 0.8, 0.85] }),
+      transformed(weathered(new THREE.SphereGeometry(0.75, 14, 10), 0.16, 5.3), {
+        pos: [1.6, 0.5, 0.2],
+        scale: [1.5, 0.72, 0.8],
+      }),
       transformed(new THREE.ConeGeometry(0.34, 1.1, 8), { pos: [2.7, 0.5, 0.2], rot: [0, 0, -Math.PI / 2] }),
     ];
     // Ribcage: paired arcs walking back down the spine.
@@ -418,7 +491,7 @@ export class World {
     this.bones = this._instance(geo, mat, spots, (d, p) => {
       d.position.set(p.x, p.y, p.z);
       d.rotation.set(0, Math.random() * Math.PI * 2, 0);
-      const s = 1.4 + Math.random() * 1.6;
+      const s = 0.95 + Math.random() * 0.95;
       d.scale.setScalar(s);
     });
   }
