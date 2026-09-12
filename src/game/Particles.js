@@ -50,8 +50,8 @@ export class Particles {
     const normal = THREE.NormalBlending;
     this.ash = makePoints(CONFIG.quality.particleAsh, 0.3, 0x6a5b50, 0.4, this.sprite, normal);
     this.ember = makePoints(CONFIG.quality.particleEmber, 0.16, 0xff6a18, 0.9, this.sprite, add);
-    this.fire = makePoints(420, 0.9, 0xff4a08, 0.55, this.sprite, add);
-    this.venom = makePoints(320, 1.0, 0x9fe020, 0.4, this.sprite, add);
+    this.fire = makePoints(420, 0.55, 0xff4a08, 0.4, this.sprite, add);
+    this.venom = makePoints(320, 0.7, 0x9fe020, 0.3, this.sprite, add);
     // Impact sparks need their own pool; the ambient ember field is always full.
     this.spark = makePoints(260, 0.2, 0xffaa30, 1, this.sprite, add);
     this.blood = makePoints(220, 0.2, 0x5a0406, 0.95, this.sprite, normal);
@@ -98,11 +98,24 @@ export class Particles {
     }
   }
 
+  /**
+   * Rate is per second with a fractional carry, not per frame. Emitting per
+   * frame made a breath twice as dense at 60 FPS as at 30 and whited out the
+   * screen on fast machines.
+   */
+  _emit(sys, origin, dir, rate, dt, speed, spread) {
+    sys.carry = (sys.carry ?? 0) + rate * dt;
+    const n = Math.floor(sys.carry);
+    if (n <= 0) return;
+    sys.carry -= n;
+    this.burst(sys, origin, dir, n, speed, spread);
+  }
+
   /** Venom is slower and spreads wider, so it reads as a hanging cloud. */
-  breathe(origin, target, kind = "fire", spread = 1) {
+  breathe(origin, target, dt, kind = "fire", spread = 1) {
     this.tmp.copy(target).sub(origin).normalize();
-    if (kind === "venom") this.burst(this.venom, origin, this.tmp, 26, 11, 7 * spread);
-    else this.burst(this.fire, origin, this.tmp, 38, 18, 6 * spread);
+    if (kind === "venom") this._emit(this.venom, origin, this.tmp, 150, dt, 11, 7 * spread);
+    else this._emit(this.fire, origin, this.tmp, 260, dt, 18, 6 * spread);
   }
 
   bloodHit(origin, normal) {

@@ -125,6 +125,7 @@ export class Game {
       this.particles.breathe(
         e.dragon.mouthWorld(this._muzzle),
         this.player.position,
+        dt,
         e.ai.breath.kind,
         e.ai.breath.spread
       );

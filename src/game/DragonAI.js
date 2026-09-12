@@ -84,6 +84,7 @@ export class DragonAI {
   update(dt, ctx) {
     this.t += dt;
     this.phaseT += dt;
+    this._playerPos = ctx?.playerPos ?? null;
     this.melee = 0;
     this.breath.active = false;
     this.charge = Math.max(0, this.charge - dt * 2);
@@ -153,6 +154,15 @@ export class DragonAI {
     const floor = this.world.heightAt(pos.x, pos.z) + this.clearance;
     if (pos.y < floor) pos.y = THREE.MathUtils.damp(pos.y, floor, 8, dt);
     this.grounded = pos.y <= floor + 0.5;
+
+    // A beast this size must never occupy the camera; at point blank its wing
+    // membrane passes through the near plane and clips the first-person weapon.
+    if (this._playerPos) {
+      const standoff = this.clearance * 0.85 + 2;
+      _v.subVectors(pos, this._playerPos);
+      const gap = _v.length();
+      if (gap > 0.001 && gap < standoff) pos.copy(this._playerPos).addScaledVector(_v.divideScalar(gap), standoff);
+    }
   }
 
   _pose(dt, ctx) {
