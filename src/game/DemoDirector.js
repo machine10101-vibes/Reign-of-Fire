@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { CONFIG } from "./config.js";
 
 const SWEEP_TIME = 11;
 
@@ -56,6 +57,10 @@ export class DemoDirector {
   _track(dt, dragonPos) {
     const p = this.player;
     const to = dragonPos.clone().sub(p.position);
+    // A bolt takes most of a second to cross a hundred metres and drops four
+    // metres doing it, so aiming straight at the beast misses every time.
+    const flight = to.length() / CONFIG.weapon.muzzle;
+    to.y += 0.5 * CONFIG.weapon.gravity * flight * flight;
     const yaw = Math.atan2(-to.x, -to.z);
     const horiz = Math.max(1, Math.hypot(to.x, to.z));
     // Positive pitch is up, and the quarry is always above the ridge line.
