@@ -69,6 +69,7 @@ export class DragonAI {
     this._hitCount = 0;
     this._flinch = 1;
     this.fallSpeed = 4;
+    this.roar = 0;
   }
 
   get position() {
@@ -167,7 +168,7 @@ export class DragonAI {
     // those species spraying past the hunter for a whole attack: a Sulfurmaw
     // could breathe for a third of the fight and land almost nothing. It
     // re-acquires faster than it sweeps, so dodging a lit flame still works.
-    const rate = this.stats.turnRate * (this.breath.active ? 0.7 : 1.4);
+    const rate = this.stats.turnRate * (this.breath.active ? 1.05 : 1.6);
     this.breath.aim.lerp(_v.normalize(), 1 - Math.exp(-dt * rate)).normalize();
   }
 
@@ -184,6 +185,13 @@ export class DragonAI {
     this.stateLabel = state;
     // Backing off earns the right to press again next time in.
     if (state !== DragonState.ATTACK) this._pressed = false;
+    // A roar on the commit, not on every state change: the hunter has to hear
+    // the tell that a pass is starting, and a roar every time the AI blinks
+    // is just noise.
+    if (state === DragonState.ATTACK) {
+      this.roar = 1;
+      this.announceRoar = true;
+    }
   }
 
   _move(dt) {
@@ -231,11 +239,21 @@ export class DragonAI {
     this.dragon.root.rotation.y = current + delta * (1 - Math.exp(-dt * this.stats.turnRate));
 
     let lookAt = 0;
+    let lookPitch = 0;
     if (ctx?.playerPos && this.state !== DragonState.DEAD) {
-      _v.subVectors(ctx.playerPos, this.position).normalize();
+      _v.subVectors(ctx.playerPos, this.position);
+      const dist = Math.max(_v.length(), 0.001);
+      // How far the hunter sits above or below the beast, as a fraction of
+      // range. A dive from overhead used to leave the head still looking at
+      // the horizon, so the fire came out of a skull that was not pointing
+      // at anything.
+      lookPitch = THREE.MathUtils.clamp(_v.y / dist, -0.85, 0.7);
+      _v.divideScalar(dist);
       _side.copy(this.heading).cross(_v);
       lookAt = THREE.MathUtils.clamp(_side.y * 2, -1, 1);
     }
+    this.roar = Math.max(0, this.roar - dt * 1.6);
+    const tracking = this.breath.active || this.state === DragonState.ATTACK ? 1.15 : 0.65;
 
     this.dragon.update(dt, {
       jaw: this.breath.active ? 0.6 : this.state === DragonState.ATTACK ? 0.25 : 0.05,
@@ -243,9 +261,16 @@ export class DragonAI {
       roll: this.roll,
       flap: this.flap,
       flapRate: this.state === DragonState.ATTACK ? 1.35 : 1,
-      lash: this.state === DragonState.PAIN ? 2.4 : 1,
+      lash:
+        this.attackStyle === ATTACK.TAIL_SWEEP && this.phase === "commit"
+          ? 3.4
+          : this.state === DragonState.PAIN
+            ? 2.4
+            : 1,
       neck: this.breath.active ? -0.12 : 0,
-      lookAt,
+      lookAt: lookAt * tracking,
+      lookPitch: lookPitch * tracking,
+      roar: this.roar,
       grounded: this.grounded,
       charge: this.charge,
       dead: this.state === DragonState.DEAD,

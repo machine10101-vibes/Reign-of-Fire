@@ -24,10 +24,18 @@ const expect = (ok, message) => {
   if (!ok) errors.push(message);
 };
 
+function wingMembrane(dragon, index) {
+  // Walked rather than taken as a direct child: the sail now lives on the
+  // elbow, because a membrane parented to the shoulder cannot fold with it.
+  let found = null;
+  dragon.bones.wings[index].traverse((c) => {
+    if (c.userData.hit?.name === "wing") found = c;
+  });
+  return found;
+}
+
 function wingTipWorld(dragon, index) {
-  // Found by what it is rather than by its geometry class, which is an
-  // implementation detail of how the membrane happens to be built.
-  const membrane = dragon.bones.wings[index].children.find((c) => c.userData.hit?.name === "wing");
+  const membrane = wingMembrane(dragon, index);
   const pos = membrane.geometry.attributes.position;
   let best = null;
   let bestZ = -Infinity;
@@ -51,6 +59,9 @@ for (const id of SPECIES_ORDER) {
   dragon.anim = 0;
 
   expect(dragon.bones.wings.length === 2, `${id}: expected two wings`);
+  expect(dragon.bones.elbows?.length === 2, `${id}: wings have no elbows`);
+  expect(dragon.bones.wrists?.length === 2, `${id}: wings have no wrists`);
+  expect(dragon.bones.knees?.length === 4, `${id}: legs have no knees`);
   expect(dragon.bones.tail.length === spec.build.tailSegments, `${id}: tail segment count does not match spec`);
   expect(dragon.bones.neck.length >= 2, `${id}: neck should be at least two segments`);
   expect(dragon.hitboxes.length > 0, `${id}: no hitboxes`);
@@ -86,6 +97,38 @@ for (const id of SPECIES_ORDER) {
     Math.abs(left.y - right.y) < spec.build.scale * 0.08,
     `${id}: wings are out of phase (left y ${left.y.toFixed(2)}, right y ${right.y.toFixed(2)})`
   );
+
+  // The upstroke has to fold the elbow more than the downstroke. A flap that
+  // never changes the wing's shape is the door-swing the first rig shipped.
+  dragon.anim = 0;
+  dragon.update(1 / 60, { ...pose, flap: 1 });
+  const upFold = Math.abs(dragon.bones.elbows[0].rotation.y);
+  dragon.anim = period / 2 - 1 / 60;
+  dragon.update(1 / 60, { ...pose, flap: 1 });
+  const downFold = Math.abs(dragon.bones.elbows[0].rotation.y);
+  expect(upFold > downFold * 1.4, `${id}: elbow folds as much on the downstroke (${downFold.toFixed(2)}) as the upstroke (${upFold.toFixed(2)})`);
+
+  // The head has to pitch at the hunter. Damped, so give it a second.
+  const looking = new Dragon(spec, textures);
+  looking.update(1, { ...pose, lookPitch: 0.7, flap: 0 });
+  const headUp = looking.bones.head.rotation.z;
+  looking.update(1, { ...pose, lookPitch: -0.7, flap: 0 });
+  const headDown = looking.bones.head.rotation.z;
+  expect(headUp > headDown + 0.08, `${id}: head does not pitch toward a look target`);
+  looking.dispose();
+
+  // A glide holds the wings out instead of folding them. The Pale Stalker's
+  // silent pass is flap 0.12, and if that still folded the sail it would
+  // silhouette as a stoop rather than a hold.
+  const gliding = new Dragon(spec, textures);
+  gliding.anim = 0;
+  gliding.update(1 / 60, { ...pose, flap: 0.1 });
+  const glideFold = Math.abs(gliding.bones.elbows[0].rotation.y);
+  gliding.anim = 0;
+  gliding.update(1 / 60, { ...pose, flap: 1 });
+  const powerFold = Math.abs(gliding.bones.elbows[0].rotation.y);
+  expect(glideFold < powerFold, `${id}: a glide still folds the wing (${glideFold.toFixed(2)} vs ${powerFold.toFixed(2)})`);
+  gliding.dispose();
 
   // Headshots must be worth more than body shots after armour.
   const head = new Dragon(spec, textures);

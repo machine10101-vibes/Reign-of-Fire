@@ -172,6 +172,13 @@ export class Hunt {
 
     for (const e of this.entries) {
       e.ai.update(dt, ctx);
+      if (e.ai.announceRoar) {
+        e.ai.announceRoar = false;
+        // The roar itself is played in Game._voices, once per style, so it is
+        // not doubled here. The log line is the tell the hunter can still
+        // read after the sound has gone.
+        this.pushLog(`${e.spec.name} roars and commits.`, "attack");
+      }
       if (e.ai.breath.active) {
         this.breathing = true;
         this.breathSources.push(e);

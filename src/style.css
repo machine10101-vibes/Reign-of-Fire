@@ -350,6 +350,10 @@ h1 {
   padding: 1px 0;
 }
 
+#kill-log li.attack {
+  color: #ffd0a8;
+}
+
 #kill-log li.kill {
   color: #ffcf9a;
   opacity: 0.95;

@@ -141,8 +141,9 @@ npm run roster  # per-species behaviour report
 - `scripts/validate.mjs` — every material set the renderer asks for exists as
   WebP, and the species table is well formed.
 - `scripts/rig-test.mjs` — builds every species and measures the skeleton: wing
-  tips must travel and stay in phase, the skull must be the first hitbox tested,
-  headshots must out-damage body shots.
+  tips must travel and stay in phase, the elbow must fold on the upstroke and
+  hold on a glide, the skull must pitch at a look target, the skull must be the
+  first hitbox tested, headshots must out-damage body shots.
 - `scripts/hunt-test.mjs` — drives the real `Hunt`, `DragonAI` and `Combat` at a
   fixed timestep with no renderer attached. Every species must commit to an
   attack, stay inside its own repertoire, draw blood, and die to sustained fire;

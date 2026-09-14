@@ -54,14 +54,22 @@ The playable vertical slice must read as **Unreal Engine 5 grit**, not fantasy i
 Concept: `art/concepts/dragon_model_sheet.png`
 
 Every species is generated from one entry in `src/game/species.js`. The shared
-rig is: chest lathe → neck×2-3 → skull/jaw with teeth; dorsal spine spikes;
-tail×4-7 with a barb; two wings (shoulder, upper arm, scalloped membrane, three
-finger bones, tip hook); four legs (thigh, shin, foot, three talons).
+rig is: chest lathe with belly scutes and a dorsal keel → neck×2-3 → lathed
+skull and mandible with teeth, sockets and swept horns; dorsal spikes on the
+species that carry them; tail×4-7 with a flattened barb; two articulated wings
+(shoulder, elbow, wrist, inner and outer sails, three finger bones, tip hook);
+four legs that fold at the knee.
 
 The membrane is lofted as a cambered grid between its leading and trailing
 splines, bowed under between the arm and the trailing edge, with the bays
-falling between the finger bones. A triangulated outline has no interior
-vertices to displace and stays planar however its silhouette is shaped.
+falling between the finger bones and veins painted in the sail. A triangulated
+outline has no interior vertices to displace and stays planar however its
+silhouette is shaped.
+
+The flap is not a rigid board. The downstroke extends the elbow and travels;
+the upstroke folds it so the return does not fight the air. A glide holds the
+sail out. A bank folds the inner wing. The neck and skull pitch and yaw at the
+hunter, which is also how a dive from overhead stops breathing at the horizon.
 
 Species read apart at silhouette distance first, colour second:
 
