@@ -201,7 +201,7 @@ export class Weapon {
     // Pitched a little more nose-down so the hunter looks onto the top of the
     // prod instead of into the butt plate, which is a white door filling the
     // lower right of the frame.
-    this._restRot = new THREE.Euler(-0.2, -0.02, 0.05);
+    this._restRot = new THREE.Euler(-0.24, -0.02, 0.08);
     this._pos = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
 
@@ -405,12 +405,11 @@ export class Weapon {
       m.iron
     );
 
-    // Butt plate, with a band across it. The broad side of the stock is the
-    // biggest unbroken face on the weapon and the one nearest the eye, so it
-    // needs something on it or it reads as a plank however dark it is.
-    this._add(roundedBlock(0.014, 0.1, 0.046, 0.012), m.leather, [0, -0.006, 0.314]);
-    this._add(roundedBlock(0.02, 0.104, 0.048, 0.008), m.blued, [0, -0.004, 0.294]);
+    // A strap on each cheek of the butt — not a plate on the rear face.
+    // A flat plate there is a door filling the lower-right of the frame
+    // the moment the hunter looks down the tiller.
     for (const side of [-1, 1]) {
+      this._add(roundedBlock(0.02, 0.088, 0.004, 0.006), m.blued, [side * 0.026, -0.008, 0.296]);
       this._add(roundedBlock(0.12, 0.055, 0.005, 0.012), m.wood, [side * 0.026, 0.028, 0.19]);
       this._add(
         new THREE.TorusGeometry(0.011, 0.003, 5, 10),
@@ -904,7 +903,7 @@ export class Weapon {
     ];
     let joints = 0;
     rows.forEach((row, i) => {
-      const mcp = new THREE.Mesh(new THREE.SphereGeometry(row.r * 1.3, 8, 6), m.glove);
+      const mcp = new THREE.Mesh(new THREE.SphereGeometry(row.r * 1.08, 8, 6), m.glove);
       mcp.position.set(...around(ROOT + row.phi - 0.08, row.z));
       g.add(mcp);
       joints += 1;
@@ -960,7 +959,7 @@ export class Weapon {
       const p = around(startPhi - curl * t, z - 0.002 * i);
       pts.push(p);
       if (i > 0 && i < bones) {
-        const joint = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.22, 8, 6), this.mats.glove);
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.06, 8, 6), this.mats.glove);
         joint.position.set(...p);
         parent.add(joint);
         joints += 1;
