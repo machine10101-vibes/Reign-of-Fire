@@ -179,6 +179,17 @@ for (const [name, arm, side] of [
     palm.distanceTo(handle) < 0.05 * CONFIG.viewmodel.scale,
     `${name} hand sits ${mm(palm.distanceTo(handle))} from the handle it holds`
   );
+
+  // Five digits (the rear hand's index is the trigger finger) with visible
+  // joints. Four unbroken tubes and a slab is what the last pair were.
+  expect(
+    (hand.userData.digits ?? 0) >= 4,
+    `${name} hand only publishes ${hand.userData.digits ?? 0} digits`
+  );
+  expect(
+    (hand.userData.joints ?? 0) >= 8,
+    `${name} hand has ${hand.userData.joints ?? 0} finger joints, needs a PIP and a DIP on each`
+  );
 }
 
 // The trigger finger is built from the trigger's real position, so it has to

@@ -46,9 +46,16 @@ export class Viewmodel {
     this.rim = new THREE.DirectionalLight(0x7d93bd, 1.1);
     this.rim.position.set(0.85, 0.32, -0.6);
     this.bounce = new THREE.HemisphereLight(0x8a6a55, 0x2a1710, 1.1);
+    // A short fill on the gloves. Without it the hands sit in the hunter's
+    // own shadow and every joint collapses into one dark mass, however
+    // carefully they were modelled.
+    this.handFill = new THREE.PointLight(0xc4a078, 0.5, 0.65, 2);
+    this.handFill.position.set(0.1, -0.12, -0.42);
     this.muzzle = new THREE.PointLight(0xffb066, 0, 3.4, 2);
     this.muzzle.position.set(0, 0.0, -0.8);
-    for (const light of [this.key, this.rim, this.bounce, this.muzzle]) this.camera.add(light);
+    for (const light of [this.key, this.rim, this.bounce, this.handFill, this.muzzle]) {
+      this.camera.add(light);
+    }
 
     this._q = new THREE.Quaternion();
     this._sun = new THREE.Vector3();
