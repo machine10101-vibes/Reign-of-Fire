@@ -82,19 +82,35 @@ export class GameAudio {
     this._osc("sine", sprint ? 70 : 55, 0.09, 0.08, -20);
   }
 
-  roar() {
-    this._osc("sawtooth", 90, 0.8, 0.16, -40);
-    this._noise(0.5, 0.22, 300);
+  /**
+   * Species voice: a small Emberkin shrieks near 220 Hz, a Basalt Tyrant
+   * answers around 52 Hz, so pitch alone tells you what is behind you.
+   */
+  roar(freq = 90, distance = 0) {
+    const falloff = Math.max(0.15, 1 - distance / 180);
+    this._osc("sawtooth", freq, 0.9, 0.18 * falloff, -freq * 0.4);
+    this._osc("square", freq * 1.5, 0.5, 0.05 * falloff, -freq * 0.3);
+    this._noise(0.55, 0.2 * falloff, Math.max(160, freq * 3.2));
   }
 
-  impact() {
-    this._noise(0.12, 0.28, 900);
-    this._osc("square", 220, 0.1, 0.08, -120);
+  impact(critical = false) {
+    this._noise(0.12, critical ? 0.4 : 0.28, critical ? 1400 : 900);
+    this._osc("square", critical ? 420 : 220, 0.12, 0.09, -140);
   }
 
-  breath() {
-    this._noise(0.6, 0.2, 500);
+  breath(freq = 500) {
+    this._noise(0.6, 0.2, freq);
     this._osc("sawtooth", 60, 0.5, 0.1, 40);
+  }
+
+  mortar() {
+    this._osc("sine", 320, 0.45, 0.1, -240);
+    this._noise(0.3, 0.12, 260);
+  }
+
+  explode() {
+    this._noise(0.7, 0.4, 140);
+    this._osc("sine", 70, 0.7, 0.24, -45);
   }
 
   death() {

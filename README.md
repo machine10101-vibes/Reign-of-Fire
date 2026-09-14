@@ -1,6 +1,6 @@
 # Reign of Fire
 
-First-person dragon hunt on Caldera Ridge. WebGL vertical slice targeting Unreal-style grit: volcanic terrain, a fully animated Ashwrought, and the Ashpiercer ballista.
+First-person dragon hunt on Caldera Ridge. WebGL vertical slice targeting Unreal-style grit: volcanic terrain lit by image-based lighting, seven dragon species with their own personalities, and the Ashpiercer ballista.
 
 ## Play live
 
@@ -36,20 +36,150 @@ Cinematic autoplay: `http://localhost:5173/?autoplay=1`
 | C | Crouch |
 | Space | Jump |
 
+Standing inside the staked camp ring at the spawn point binds wounds between flights.
+Run out of health and the hunter goes down: the beast that did it is named, and he
+is dragged back to the camp fire with the flight restarted. Bounty already earned
+stands — the flight is the thing you lose.
+
+## The roster
+
+Seven flights, then endless mixed waves. Every beast below is generated from one
+entry in [`src/game/species.js`](src/game/species.js): `build` drives its
+procedural anatomy, `look` drives its materials and emissive grading, `stats`
+drives its combat numbers, and `mind` drives its AI.
+
+| Species | Epithet | Aggr. | HP | Armour | Signature behaviour |
+| --- | --- | --- | --- | --- | --- |
+| Emberkin | Carrion Scavenger | 0.28 | 240 | — | Opportunist. Circles wide and only lunges while your weapon is dry; breaks off at 55% health |
+| Cinderwyrm | Forge-Hot Harrier | 0.95 | 620 | — | Erratic strafing passes with almost no wind-up. Never disengages, but thin-skinned |
+| Ashwrought | Obsidian Tyrant | 0.72 | 1100 | 12% | Territorial. Holds its patrol ring, then commits to long dive-fire runs |
+| Rustwing | Pack Hunter | 0.35 | 380 | 5% | Cold-blooded and never alone. Borrows aggression from every packmate in the fight, reaching 0.95 in threes and losing its nerve as they die |
+| Sulfurmaw | Fumarole Brood | 0.60 | 1000 | 10% | Sprays caustic aerosol that keeps burning after the pass, fencing you out of cover |
+| Pale Stalker | Silent Ambusher | 0.62 | 900 | 18% | Stops flapping to go silent and shadows you for a long time, then closes in one lunge |
+| Basalt Tyrant | Walking Siege | 0.55 | 2600 | 55% | Too heavy to dive. Hovers at range lobbing lava mortars; bolts glance off everything but the skull |
+
+Attack styles implemented: dive fire, strafe run, hover barrage, lava mortar,
+ambush lunge, venom spray, tail sweep. A beast scores the styles it knows on how
+well the current range suits them, on how often its spec lists them (duplicate
+entries are how a signature attack is weighted), and against repeating whatever
+it just did, unless its `erratic` weight rolls the score away entirely. A beast
+that finishes a pass still on top of the hunter presses the attack once more
+rather than climbing back out to its standoff, which is what puts the
+short-range half of a repertoire in reach at all.
+
+`patience` sets wind-up and cooldown length, `courage` decides whether a bolt
+interrupts a committed attack, `territorial` decides whether it holds a ring or
+shadows you, and `fleeAt` sets the health fraction it runs at. `packMinded` is
+the one weight that reads the rest of the roster: it adds live aggression per
+packmate in the fight, counting one mid-attack as worth two that have merely
+spotted you.
+
+## Rendering
+
+The frame is assembled in this order, and the order matters:
+
+1. Scene pass into a linear HDR buffer, lit by a sun, a hemisphere fill, a cool
+   rim light and image-based lighting baked from the sky plate through
+   `PMREMGenerator`.
+2. Bloom and the motion-trail afterimage, which belong on linear HDR values.
+3. `OutputPass` — ACES filmic tone mapping and the sRGB transfer.
+4. The composite grade: warm ash grading, radial chromatic dispersion, vignette
+   and luminance-weighted film grain. These are photographic effects and have to
+   run on display-referred pixels, not linear ones.
+
+The terrain height field carries relief at four scales — eighty-metre swells,
+the ridge system, twenty-metre benches, and the six- and two-metre bands — at
+just over a metre per quad so all of them resolve. Two things have to be right
+or ground reads as sand dunes, and neither is a texturing problem. Every scale
+has to be occupied: skipping one leaves the height field interpolating smoothly
+across the gap. And the massif has to be shaped with a *ridged* multifractal
+rather than plain fbm, because fbm is rolling by construction — every octave is
+as likely to be a mound as a hollow — so an fbm landscape is sand at any scale
+and more octaves only make finer sand. Folding each octave about its midpoint
+gives crests with gullies between them, and weighting each octave by the one
+above concentrates fine detail on the crests the way erosion does.
+
+Rock is cut, not dented. Boulders are the intersection of eleven cutting planes
+spread over a Fibonacci spiral, so flat faces and hard edges fall out of the
+construction; a sphere displaced by noise is a lumpy ball, and at boulder size
+a lumpy ball is a mound of earth. Stone comes in two size classes with their own
+geometry density and texture repeat, because one repeat cannot serve both a
+knee-high stone and a five-metre block without smearing a tile across metres of
+rock on the big one.
+
+Terrain also samples its albedo and roughness twice, once for macro shape and
+once at eight times the frequency for detail underfoot, and its lava glow is
+gated on the crack mask so the emissive cannot out-radiate the rock. Dragon hides gate their
+molten grout the same way, pooling heat into bands and along the belly, and tie
+scale tiling to body size so a Basalt Tyrant is not wearing an Emberkin's scales
+scaled up four times.
+
+Wing membranes are lofted as cambered grids rather than triangulated outlines,
+because an outline has no interior vertices to displace and stays planar however
+its silhouette is shaped. They are lit through as well as on: transmission is
+strongest face-on, where the light's path through the membrane is shortest, and
+is multiplied by the hide colour so the vanes and finger bones stay silhouetted.
+
+Past the playable ground the skyline is three noise-driven curtains. At 300-470
+metres fog has taken all but a tenth of their shading, so only the outline reads,
+and instanced cones silhouette as triangles no matter how their flanks are
+displaced.
+
+Quality is adaptive across four tiers. Frame time is measured off the wall clock
+rather than the simulation step, because the simulation clamps its `dt` and that
+clamp would hide every frame slower than it. Each tier sets shadow resolution,
+particle budgets, prop shadow casting, post-processing passes and a render scale
+that both the renderer and the composer honour.
+
+## Tests
+
+```bash
+npm test        # asset, rig and behaviour checks
+npm run roster  # per-species behaviour report
+```
+
+- `scripts/validate.mjs` — every material set the renderer asks for exists as
+  WebP, and the species table is well formed.
+- `scripts/rig-test.mjs` — builds every species and measures the skeleton: wing
+  tips must travel and stay in phase, the elbow must fold on the upstroke and
+  hold on a glide, the skull must pitch at a look target, the skull must be the
+  first hitbox tested, headshots must out-damage body shots.
+- `scripts/hunt-test.mjs` — drives the real `Hunt`, `DragonAI` and `Combat` at a
+  fixed timestep with no renderer attached. Every species must commit to an
+  attack, stay inside its own repertoire, draw blood, and die to sustained fire;
+  a 0.95-aggression beast must out-damage a 0.28 one; cowards must break off
+  when wounded and the fearless must not; a lit flame must actually be pointed
+  at the hunter; and a pack hunter's extra nerve must come from `packMinded`
+  rather than from there simply being more of them.
+
+The harness seeds `Math.random`, because the AI reads it for spawn angles,
+patrol drift and its attack roll: unseeded, these checks passed or failed by
+luck, and a breath-aim bug that cost one species almost all of its damage
+output showed up in only about half of runs. Every check runs the same five
+seeds and the noisy damage comparisons are made about the mean.
+
+`npm run roster` prints engagement share, attack commitments, breath time and
+damage per species, which is how the personality weights get checked against
+behaviour instead of being taken on faith.
+
 ## Milestones in this slice
 
 1. **Visual target & pipeline** — `art/`, `docs/STYLE_GUIDE.md`, PBR bake, OBJ/animation export, Blender bpy script
-2. **Mechanics** — FPS controller, camera shake, footfall weight, motion blur, dragon AI, ballistics, hitboxes, fire/blood particles
-3. **World** — volcanic ridge, volumetric-style ash, ember lighting, adaptive 60 FPS quality ladder
+2. **Mechanics** — FPS controller, camera shake, footfall weight, motion blur, species AI, ballistics, hitboxes, fire/venom/blood particles
+3. **World** — volcanic ridge, obsidian spires, burnt groves, bone piles, ruins, lava pools, erupting volcano, hunter's camp, ash lighting, adaptive 60 FPS quality ladder
 
 Blender MCP is not attached to this runtime. `pipeline/blender_scene.py` is the offline reconstruction entry when Blender is installed.
 
 ## Layout
 
 ```
-art/                 visual target + creature/weapon concepts
+art/                 visual target, concepts, source albedos, height maps, OBJ/animation exports
 docs/STYLE_GUIDE.md  art bible
 pipeline/            PBR baker, OBJ export, Blender scene
-public/assets/       runtime textures, models, animations
+public/assets/       runtime textures (WebP) + title art
 src/game/            playable Three.js slice
 ```
+
+Only the six maps the renderer samples are published, as WebP q90. Source
+albedos, height maps and the offline OBJ exports live under `art/` and stay out
+of the web payload.

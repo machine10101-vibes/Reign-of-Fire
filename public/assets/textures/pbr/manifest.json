@@ -6,14 +6,22 @@
       1024,
       1024
     ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
     "maps": {
-      "albedo": "public/assets/textures/pbr/dragon_scales_albedo.png",
-      "normal": "public/assets/textures/pbr/dragon_scales_normal.png",
-      "roughness": "public/assets/textures/pbr/dragon_scales_roughness.png",
-      "metallic": "public/assets/textures/pbr/dragon_scales_metallic.png",
-      "height": "public/assets/textures/pbr/dragon_scales_height.png",
-      "ao": "public/assets/textures/pbr/dragon_scales_ao.png",
-      "emissive": "public/assets/textures/pbr/dragon_scales_emissive.png"
+      "albedo": "public/assets/textures/pbr/dragon_scales_albedo.webp",
+      "normal": "public/assets/textures/pbr/dragon_scales_normal.webp",
+      "roughness": "public/assets/textures/pbr/dragon_scales_roughness.webp",
+      "metallic": "public/assets/textures/pbr/dragon_scales_metallic.webp",
+      "ao": "public/assets/textures/pbr/dragon_scales_ao.webp",
+      "emissive": "public/assets/textures/pbr/dragon_scales_emissive.webp",
+      "height": "art/textures/height/dragon_scales_height.png"
     }
   },
   {
@@ -23,14 +31,22 @@
       1024,
       1024
     ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
     "maps": {
-      "albedo": "public/assets/textures/pbr/dragon_wing_albedo.png",
-      "normal": "public/assets/textures/pbr/dragon_wing_normal.png",
-      "roughness": "public/assets/textures/pbr/dragon_wing_roughness.png",
-      "metallic": "public/assets/textures/pbr/dragon_wing_metallic.png",
-      "height": "public/assets/textures/pbr/dragon_wing_height.png",
-      "ao": "public/assets/textures/pbr/dragon_wing_ao.png",
-      "emissive": "public/assets/textures/pbr/dragon_wing_emissive.png"
+      "albedo": "public/assets/textures/pbr/dragon_wing_albedo.webp",
+      "normal": "public/assets/textures/pbr/dragon_wing_normal.webp",
+      "roughness": "public/assets/textures/pbr/dragon_wing_roughness.webp",
+      "metallic": "public/assets/textures/pbr/dragon_wing_metallic.webp",
+      "ao": "public/assets/textures/pbr/dragon_wing_ao.webp",
+      "emissive": "public/assets/textures/pbr/dragon_wing_emissive.webp",
+      "height": "art/textures/height/dragon_wing_height.png"
     }
   },
   {
@@ -40,14 +56,22 @@
       1024,
       1024
     ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
     "maps": {
-      "albedo": "public/assets/textures/pbr/terrain_rock_albedo.png",
-      "normal": "public/assets/textures/pbr/terrain_rock_normal.png",
-      "roughness": "public/assets/textures/pbr/terrain_rock_roughness.png",
-      "metallic": "public/assets/textures/pbr/terrain_rock_metallic.png",
-      "height": "public/assets/textures/pbr/terrain_rock_height.png",
-      "ao": "public/assets/textures/pbr/terrain_rock_ao.png",
-      "emissive": "public/assets/textures/pbr/terrain_rock_emissive.png"
+      "albedo": "public/assets/textures/pbr/terrain_rock_albedo.webp",
+      "normal": "public/assets/textures/pbr/terrain_rock_normal.webp",
+      "roughness": "public/assets/textures/pbr/terrain_rock_roughness.webp",
+      "metallic": "public/assets/textures/pbr/terrain_rock_metallic.webp",
+      "ao": "public/assets/textures/pbr/terrain_rock_ao.webp",
+      "emissive": "public/assets/textures/pbr/terrain_rock_emissive.webp",
+      "height": "art/textures/height/terrain_rock_height.png"
     }
   },
   {
@@ -57,14 +81,22 @@
       1024,
       1024
     ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
     "maps": {
-      "albedo": "public/assets/textures/pbr/weapon_metal_albedo.png",
-      "normal": "public/assets/textures/pbr/weapon_metal_normal.png",
-      "roughness": "public/assets/textures/pbr/weapon_metal_roughness.png",
-      "metallic": "public/assets/textures/pbr/weapon_metal_metallic.png",
-      "height": "public/assets/textures/pbr/weapon_metal_height.png",
-      "ao": "public/assets/textures/pbr/weapon_metal_ao.png",
-      "emissive": "public/assets/textures/pbr/weapon_metal_emissive.png"
+      "albedo": "public/assets/textures/pbr/weapon_metal_albedo.webp",
+      "normal": "public/assets/textures/pbr/weapon_metal_normal.webp",
+      "roughness": "public/assets/textures/pbr/weapon_metal_roughness.webp",
+      "metallic": "public/assets/textures/pbr/weapon_metal_metallic.webp",
+      "ao": "public/assets/textures/pbr/weapon_metal_ao.webp",
+      "emissive": "public/assets/textures/pbr/weapon_metal_emissive.webp",
+      "height": "art/textures/height/weapon_metal_height.png"
     }
   },
   {
@@ -74,14 +106,22 @@
       1024,
       1024
     ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
     "maps": {
-      "albedo": "public/assets/textures/pbr/weapon_wood_albedo.png",
-      "normal": "public/assets/textures/pbr/weapon_wood_normal.png",
-      "roughness": "public/assets/textures/pbr/weapon_wood_roughness.png",
-      "metallic": "public/assets/textures/pbr/weapon_wood_metallic.png",
-      "height": "public/assets/textures/pbr/weapon_wood_height.png",
-      "ao": "public/assets/textures/pbr/weapon_wood_ao.png",
-      "emissive": "public/assets/textures/pbr/weapon_wood_emissive.png"
+      "albedo": "public/assets/textures/pbr/weapon_wood_albedo.webp",
+      "normal": "public/assets/textures/pbr/weapon_wood_normal.webp",
+      "roughness": "public/assets/textures/pbr/weapon_wood_roughness.webp",
+      "metallic": "public/assets/textures/pbr/weapon_wood_metallic.webp",
+      "ao": "public/assets/textures/pbr/weapon_wood_ao.webp",
+      "emissive": "public/assets/textures/pbr/weapon_wood_emissive.webp",
+      "height": "art/textures/height/weapon_wood_height.png"
     }
   },
   {
@@ -91,14 +131,22 @@
       1024,
       1024
     ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
     "maps": {
-      "albedo": "public/assets/textures/pbr/leather_glove_albedo.png",
-      "normal": "public/assets/textures/pbr/leather_glove_normal.png",
-      "roughness": "public/assets/textures/pbr/leather_glove_roughness.png",
-      "metallic": "public/assets/textures/pbr/leather_glove_metallic.png",
-      "height": "public/assets/textures/pbr/leather_glove_height.png",
-      "ao": "public/assets/textures/pbr/leather_glove_ao.png",
-      "emissive": "public/assets/textures/pbr/leather_glove_emissive.png"
+      "albedo": "public/assets/textures/pbr/leather_glove_albedo.webp",
+      "normal": "public/assets/textures/pbr/leather_glove_normal.webp",
+      "roughness": "public/assets/textures/pbr/leather_glove_roughness.webp",
+      "metallic": "public/assets/textures/pbr/leather_glove_metallic.webp",
+      "ao": "public/assets/textures/pbr/leather_glove_ao.webp",
+      "emissive": "public/assets/textures/pbr/leather_glove_emissive.webp",
+      "height": "art/textures/height/leather_glove_height.png"
     }
   },
   {
@@ -108,21 +156,254 @@
       1024,
       1024
     ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
     "maps": {
-      "albedo": "public/assets/textures/pbr/lava_albedo.png",
-      "normal": "public/assets/textures/pbr/lava_normal.png",
-      "roughness": "public/assets/textures/pbr/lava_roughness.png",
-      "metallic": "public/assets/textures/pbr/lava_metallic.png",
-      "height": "public/assets/textures/pbr/lava_height.png",
-      "ao": "public/assets/textures/pbr/lava_ao.png",
-      "emissive": "public/assets/textures/pbr/lava_emissive.png"
+      "albedo": "public/assets/textures/pbr/lava_albedo.webp",
+      "normal": "public/assets/textures/pbr/lava_normal.webp",
+      "roughness": "public/assets/textures/pbr/lava_roughness.webp",
+      "metallic": "public/assets/textures/pbr/lava_metallic.webp",
+      "ao": "public/assets/textures/pbr/lava_ao.webp",
+      "emissive": "public/assets/textures/pbr/lava_emissive.webp",
+      "height": "art/textures/height/lava_height.png"
+    }
+  },
+  {
+    "source": "scales_basalt_albedo.png",
+    "stem": "scales_basalt",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/scales_basalt_albedo.webp",
+      "normal": "public/assets/textures/pbr/scales_basalt_normal.webp",
+      "roughness": "public/assets/textures/pbr/scales_basalt_roughness.webp",
+      "metallic": "public/assets/textures/pbr/scales_basalt_metallic.webp",
+      "ao": "public/assets/textures/pbr/scales_basalt_ao.webp",
+      "emissive": "public/assets/textures/pbr/scales_basalt_emissive.webp",
+      "height": "art/textures/height/scales_basalt_height.png"
+    }
+  },
+  {
+    "source": "scales_cinder_albedo.png",
+    "stem": "scales_cinder",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/scales_cinder_albedo.webp",
+      "normal": "public/assets/textures/pbr/scales_cinder_normal.webp",
+      "roughness": "public/assets/textures/pbr/scales_cinder_roughness.webp",
+      "metallic": "public/assets/textures/pbr/scales_cinder_metallic.webp",
+      "ao": "public/assets/textures/pbr/scales_cinder_ao.webp",
+      "emissive": "public/assets/textures/pbr/scales_cinder_emissive.webp",
+      "height": "art/textures/height/scales_cinder_height.png"
+    }
+  },
+  {
+    "source": "scales_pale_albedo.png",
+    "stem": "scales_pale",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/scales_pale_albedo.webp",
+      "normal": "public/assets/textures/pbr/scales_pale_normal.webp",
+      "roughness": "public/assets/textures/pbr/scales_pale_roughness.webp",
+      "metallic": "public/assets/textures/pbr/scales_pale_metallic.webp",
+      "ao": "public/assets/textures/pbr/scales_pale_ao.webp",
+      "emissive": "public/assets/textures/pbr/scales_pale_emissive.webp",
+      "height": "art/textures/height/scales_pale_height.png"
+    }
+  },
+  {
+    "source": "scales_sulfur_albedo.png",
+    "stem": "scales_sulfur",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/scales_sulfur_albedo.webp",
+      "normal": "public/assets/textures/pbr/scales_sulfur_normal.webp",
+      "roughness": "public/assets/textures/pbr/scales_sulfur_roughness.webp",
+      "metallic": "public/assets/textures/pbr/scales_sulfur_metallic.webp",
+      "ao": "public/assets/textures/pbr/scales_sulfur_ao.webp",
+      "emissive": "public/assets/textures/pbr/scales_sulfur_emissive.webp",
+      "height": "art/textures/height/scales_sulfur_height.png"
+    }
+  },
+  {
+    "source": "scales_ember_albedo.png",
+    "stem": "scales_ember",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/scales_ember_albedo.webp",
+      "normal": "public/assets/textures/pbr/scales_ember_normal.webp",
+      "roughness": "public/assets/textures/pbr/scales_ember_roughness.webp",
+      "metallic": "public/assets/textures/pbr/scales_ember_metallic.webp",
+      "ao": "public/assets/textures/pbr/scales_ember_ao.webp",
+      "emissive": "public/assets/textures/pbr/scales_ember_emissive.webp",
+      "height": "art/textures/height/scales_ember_height.png"
+    }
+  },
+  {
+    "source": "scales_kin_albedo.png",
+    "stem": "scales_kin",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/scales_kin_albedo.webp",
+      "normal": "public/assets/textures/pbr/scales_kin_normal.webp",
+      "roughness": "public/assets/textures/pbr/scales_kin_roughness.webp",
+      "metallic": "public/assets/textures/pbr/scales_kin_metallic.webp",
+      "ao": "public/assets/textures/pbr/scales_kin_ao.webp",
+      "emissive": "public/assets/textures/pbr/scales_kin_emissive.webp",
+      "height": "art/textures/height/scales_kin_height.png"
+    }
+  },
+  {
+    "source": "burnt_bark_albedo.png",
+    "stem": "burnt_bark",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/burnt_bark_albedo.webp",
+      "normal": "public/assets/textures/pbr/burnt_bark_normal.webp",
+      "roughness": "public/assets/textures/pbr/burnt_bark_roughness.webp",
+      "metallic": "public/assets/textures/pbr/burnt_bark_metallic.webp",
+      "ao": "public/assets/textures/pbr/burnt_bark_ao.webp",
+      "emissive": "public/assets/textures/pbr/burnt_bark_emissive.webp",
+      "height": "art/textures/height/burnt_bark_height.png"
+    }
+  },
+  {
+    "source": "bone_albedo.png",
+    "stem": "bone",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/bone_albedo.webp",
+      "normal": "public/assets/textures/pbr/bone_normal.webp",
+      "roughness": "public/assets/textures/pbr/bone_roughness.webp",
+      "metallic": "public/assets/textures/pbr/bone_metallic.webp",
+      "ao": "public/assets/textures/pbr/bone_ao.webp",
+      "emissive": "public/assets/textures/pbr/bone_emissive.webp",
+      "height": "art/textures/height/bone_height.png"
+    }
+  },
+  {
+    "source": "obsidian_albedo.png",
+    "stem": "obsidian",
+    "resolution": [
+      768,
+      768
+    ],
+    "runtimeMaps": [
+      "albedo",
+      "normal",
+      "roughness",
+      "metallic",
+      "ao",
+      "emissive"
+    ],
+    "maps": {
+      "albedo": "public/assets/textures/pbr/obsidian_albedo.webp",
+      "normal": "public/assets/textures/pbr/obsidian_normal.webp",
+      "roughness": "public/assets/textures/pbr/obsidian_roughness.webp",
+      "metallic": "public/assets/textures/pbr/obsidian_metallic.webp",
+      "ao": "public/assets/textures/pbr/obsidian_ao.webp",
+      "emissive": "public/assets/textures/pbr/obsidian_emissive.webp",
+      "height": "art/textures/height/obsidian_height.png"
     }
   },
   {
     "source": "sky_ash_storm.png",
     "stem": "sky",
     "maps": {
-      "env": "public/assets/textures/pbr/sky_ash_storm.png"
+      "env": "public/assets/textures/pbr/sky_ash_storm.webp"
     }
   }
 ]

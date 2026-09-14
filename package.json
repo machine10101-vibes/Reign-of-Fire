@@ -13,7 +13,8 @@
     "pipeline:models": "python3 pipeline/export_models.py",
     "pipeline:blender": "python3 pipeline/blender_scene.py",
     "pipeline": "python3 pipeline/generate_pbr.py && python3 pipeline/export_models.py && python3 pipeline/blender_scene.py",
-    "test": "node scripts/validate.mjs"
+    "test": "node scripts/validate.mjs && node scripts/rig-test.mjs && node scripts/weapon-test.mjs && node scripts/hunt-test.mjs",
+    "roster": "node scripts/roster-report.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"

@@ -11,14 +11,16 @@
     <div id="app">
       <canvas id="gl"></canvas>
       <div id="title-screen">
-        <img id="title-art" src="./assets/art/visual_target_fps.png" alt="Reign of Fire visual target" />
+        <img id="title-art" src="./assets/art/visual_target_fps.webp" alt="Reign of Fire visual target" />
         <div id="title-copy">
           <p class="eyebrow">Vertical slice</p>
           <h1>Reign of Fire</h1>
-          <p class="tag">Caldera Ridge · Ashwrought hunt</p>
-          <button id="hunt-btn" type="button">Begin the hunt</button>
+          <p class="tag">Caldera Ridge &middot; seven species, one ridge</p>
+          <div id="codex"></div>
+          <button id="hunt-btn" type="button" disabled>Loading the ridge&hellip;</button>
+          <div id="loading"><i id="loading-fill"></i></div>
           <p class="controls">
-            WASD move · Mouse look · LMB fire · R reload · Shift sprint · C crouch
+            WASD move &middot; Mouse look &middot; LMB fire &middot; R reload &middot; Shift sprint &middot; C crouch &middot; Space jump
           </p>
           <p class="controls sub">
             Autoplay cinematic: add <code>?autoplay=1</code>
@@ -38,17 +40,33 @@
           <div class="meter">
             <span>Ashpiercer</span>
             <div id="bolts">8 / 8</div>
+            <div id="reload"><i id="reload-fill"></i><span id="reload-label">Winding</span></div>
           </div>
         </div>
         <div id="top-right">
           <div id="fps">60 FPS</div>
           <div id="quality">Cinematic</div>
+          <div id="bounty">0 gold</div>
+          <ul id="kill-log"></ul>
         </div>
         <div id="beast">
-          <span>Ashwrought</span>
+          <div id="beast-wave">Flight 1 of 6</div>
+          <div id="beast-name">Emberkin</div>
+          <div id="beast-epithet">Carrion Scavenger</div>
           <div class="bar beast"><i id="beast-fill"></i></div>
+          <div id="beast-mood">
+            <span id="beast-state">patrol</span>
+            <span id="beast-aggr-label">Aggression</span>
+            <div class="bar aggr"><i id="beast-aggr"></i></div>
+          </div>
         </div>
+        <div id="threats"></div>
         <div id="hint">The ridge is watching.</div>
+        <div id="downed" class="hidden">
+          <p id="downed-title">The ridge takes its due</p>
+          <p id="downed-line"></p>
+          <p id="downed-sub">Dragged back to the camp fire</p>
+        </div>
       </div>
     </div>
     <script type="module" src="./src/main.js"></script>

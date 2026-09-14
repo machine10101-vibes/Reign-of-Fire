@@ -1,11 +1,12 @@
 import * as THREE from "three";
 import { CONFIG } from "./config.js";
 import { loadTextures } from "./assets.js";
+import { SPECIES, SPECIES_ORDER, LAZY_PACKS } from "./species.js";
 import { World } from "./World.js";
 import { Player } from "./Player.js";
 import { Weapon } from "./Weapon.js";
-import { Dragon } from "./Dragon.js";
-import { DragonAI } from "./DragonAI.js";
+import { Viewmodel } from "./Viewmodel.js";
+import { Hunt } from "./Hunt.js";
 import { Particles } from "./Particles.js";
 import { Combat } from "./Combat.js";
 import { PostFX } from "./PostFX.js";
@@ -21,18 +22,18 @@ export class Game {
     this.audio = new GameAudio();
     this.perf = new PerformanceMonitor();
     this.clock = new THREE.Clock();
-    this._aim = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
     this._dir = new THREE.Vector3();
     this._look = new THREE.Vector3();
     this.raycaster = new THREE.Raycaster();
     this.started = false;
-    this.roared = false;
-    this.deadFx = false;
   }
 
   async init() {
-    const textures = await loadTextures();
+    this.hud.renderCodex(SPECIES, SPECIES_ORDER);
+    const textures = await loadTextures((loaded, total) => this.hud.setLoading(loaded / total));
+    this.textures = textures;
+
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
@@ -42,45 +43,40 @@ export class Game {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.28;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 700);
+    this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 900);
     this.camera.rotation.order = "YXZ";
     this.scene.add(this.camera);
 
-    this.world = new World(this.scene, textures);
+    this.world = new World(this.scene, textures, this.renderer);
     this.player = new Player(this.camera, this.world);
     this.player.position.set(2, this.world.heightAt(2, 46) + CONFIG.player.eye, 46);
     this.player.yaw = 0.04;
-    this.player.pitch = -0.32;
+    this.player.pitch = -0.18;
     this.player.bind(this.canvas);
-    this.weapon = new Weapon(this.camera, textures);
-
-    this.dragon = new Dragon(textures);
-    this.dragon.root.position.set(8, CONFIG.dragon.patrolHeight, -36);
-    this.scene.add(this.dragon.root);
-    this.ai = new DragonAI(this.dragon);
+    this.viewmodel = new Viewmodel(this.camera, innerWidth / innerHeight, this.world.envMap);
+    this.weapon = new Weapon(this.viewmodel, textures);
 
     this.particles = new Particles(this.scene);
-    this.combat = new Combat(this.scene, this.world, this.dragon, this.particles, this.audio);
-    this.fx = new PostFX(this.renderer, this.scene, this.camera);
+    this.hunt = new Hunt(this.scene, this.world, textures, this.audio);
+    this.combat = new Combat(this.scene, this.world, this.hunt, this.particles, this.audio);
+    this.fx = new PostFX(this.renderer, this.scene, this.camera, this.viewmodel);
     this.demo = new DemoDirector(this.player, this.weapon);
-    this.world.setQuality(this.perf.tier);
-    this.particles.setQuality(this.perf.tier);
-    this.fx.setQuality(this.perf.tier);
 
-    this.perf.onChange((tier) => {
-      this.world.setQuality(tier);
-      this.particles.setQuality(tier);
-      this.fx.setQuality(tier);
-      if (tier === "low") this.renderer.setPixelRatio(1);
-      else if (tier === "medium") this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
-    });
+    this._applyQuality(this.perf.tier);
+    this.perf.onChange((tier) => this._applyQuality(tier));
+
+    const flight = Number(new URLSearchParams(location.search).get("flight"));
+    await this.hunt.begin(Number.isFinite(flight) ? flight - 1 : 0);
+    // The rest of the roster streams in behind the first flight.
+    this.textures.prefetch(LAZY_PACKS);
 
     window.addEventListener("resize", () => this.resize());
+    this.hud.ready();
     if (this.demo.enabled) this.start();
   }
 
@@ -98,45 +94,72 @@ export class Game {
     const h = innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.viewmodel.resize(w / h);
     this.renderer.setSize(w, h);
     this.fx.resize(w, h);
   }
 
+  _applyQuality(tier) {
+    this.world.setQuality(tier);
+    this.particles.setQuality(tier);
+    this.fx.setQuality(tier);
+    this.hunt.setQuality(tier);
+    // Shading fewer pixels is the cheapest thing a struggling machine can do,
+    // so the lower tiers render below native and let the canvas upscale.
+    const ratio = Math.min(devicePixelRatio, 1.75) * CONFIG.quality.renderScale[tier];
+    this.renderer.setPixelRatio(ratio);
+    this.fx.setPixelRatio(ratio);
+  }
+
   tick() {
     const dt = Math.min(this.clock.getDelta(), 0.05);
-    this.perf.frame(dt);
-    this.demo.update(dt, this.dragon.root.position);
+    this.perf.frame();
+
+    const focusForDemo = this.hunt.focus(this.player.position);
+    this.demo.update(dt, focusForDemo?.dragon.root.position ?? null);
+
+    if (this.downedFor > 0) this._goingDown(dt);
+    else if (this.player.health <= 0) this._goDown();
 
     const moving = this.player.update(dt);
     if (this.player.didStep) this.audio.step(this.player.sprint);
 
-    this.ai.update(dt, this.player.position);
+    this.hunt.update(dt, this.player, this.weapon);
+    this.combat.handleRequests(this.hunt.drainRequests());
     this.world.update(this.clock.elapsedTime);
-    this.particles.update(dt);
+    this.particles.update(dt, this.player.position);
 
-    this.combat.setBreathing(this.ai.breathing);
-    if (this.ai.breathing) {
-      this.particles.fireBreath(this.dragon.mouthWorld(this._muzzle), this.player.position);
-      if (Math.random() < 0.08) this.audio.breath();
+    for (const e of this.hunt.breathSources) {
+      this.particles.breathe(
+        e.dragon.mouthWorld(this._muzzle),
+        e.ai.breathTarget(this._look),
+        dt,
+        e.ai.breath.kind,
+        e.ai.breath.spread
+      );
+      if (Math.random() < 0.06) this.audio.breath(e.spec.mind.voice.breath);
     }
+
     this.combat.update(dt, this.player);
+    this._voices();
 
     if (this.combat.didHitDragon) {
       this.combat.didHitDragon = false;
-      this.ai.notifyHit();
-      this.audio.roar();
-    }
-    if (!this.dragon.alive && !this.deadFx) {
-      this.deadFx = true;
-      this.audio.death();
-    }
-    if (this.ai.state === "alert" && !this.roared) {
-      this.audio.roar();
-      this.roared = true;
+      const dragon = this.combat.lastHitDragon;
+      const entry = this.hunt.entries.find((e) => e.dragon === dragon);
+      entry?.ai.notifyHit(this.combat.lastHitPart);
+      if (entry) this.audio.roar(entry.spec.mind.voice.roar, dragon.root.position.distanceTo(this.player.position));
     }
 
     const hot = this._aimingDragon();
-    this.weapon.update(dt, moving, hot);
+    this.viewmodel.syncLighting(this.world.sun, this.world.hemi, this.camera.quaternion);
+    this.weapon.update(dt, {
+      moving,
+      sprinting: this.player.sprint,
+      crouching: this.player.crouch,
+      turnRate: this.player.turnRate,
+      aimingHot: hot,
+    });
     if (this.player.consumeReload()) this.weapon.tryReload();
     if (this.player.fireHeld && this.weapon.tryFire()) {
       this.camera.getWorldDirection(this._dir);
@@ -144,34 +167,108 @@ export class Game {
       this.combat.fire(this._muzzle, this._dir);
       this.player.addShake(0.045);
       this.audio.fire();
+      this.particles.muzzleFlash(this._muzzle, this._dir);
     }
 
+    const focus = this.hunt.focus(this.player.position);
+    // Six flights with no recovery is unwinnable, so the camp binds wounds.
+    const resting = this.world.atCamp(this.player.position) && this.player.onFire <= 0;
+    if (resting && this.player.health < 100) {
+      this.player.health = Math.min(100, this.player.health + 9 * dt);
+    }
     const speed = Math.hypot(this.player.velocity.x, this.player.velocity.z);
     this.fx.render(dt, {
-      heat: this.player.onFire > 0 || this.ai.breathing ? 1 : 0,
+      heat: this.player.onFire > 0 || this.hunt.breathing ? 1 : 0,
       shake: this.player.shake.length() * 8,
       blur: THREE.MathUtils.clamp(speed / 14 + Math.abs(this.player.shake.x) * 6, 0.15, 1),
+      damage: THREE.MathUtils.clamp(1 - this.player.health / 45, 0, 1),
     });
 
     this.hud.update({
       health: this.player.health,
       bolts: this.weapon.bolts,
       maxBolts: this.weapon.max,
-      dragonHp: this.dragon.hp,
-      dragonMax: this.dragon.maxHp,
+      focus,
+      alive: this.hunt.alive,
+      playerPos: this.player.position,
+      flightLabel: this.hunt.flightLabel,
+      flightIndex: this.hunt.flightIndex,
+      totalFlights: this.hunt.totalFlights,
+      bounty: this.hunt.bounty,
+      log: this.hunt.log,
+      logDirty: this.hunt.logDirty,
       fps: this.perf.fps,
       quality: this.perf.tier,
-      hint: this.ai.hint,
+      hint: resting && this.player.health < 100
+        ? "Binding wounds at the camp fire."
+        : focus?.ai.hint ?? "The ridge has gone quiet.",
       hot,
       hit: this.combat.lastHit > 0,
+      hitPart: this.combat.lastHitPart,
+      // Normalised against a clean unarmoured hit, so a glance off a Basalt
+      // Tyrant's plate reads differently from one through a wing.
+      hitWeight: THREE.MathUtils.clamp((this.combat.lastHitDealt ?? 0) / CONFIG.weapon.damage, 0, 1),
       heat: this.player.onFire > 0,
+      reloading: this.weapon.reloading,
+      reloadProgress: this.weapon.reloadProgress,
     });
+    this.hunt.logDirty = false;
+  }
+
+  /**
+   * The hunter is killed. Without this the health bar simply emptied and play
+   * carried on, which left every aggression weight in the roster with nothing
+   * riding on it.
+   */
+  _goDown() {
+    // Whichever beast was committed, which is also the one the HUD has been
+    // naming; a mortar from something still circling is the rare miss.
+    const killer =
+      this.hunt.alive.find((e) => e.ai.state === "attack") ?? this.hunt.focus(this.player.position);
+    const name = killer?.spec.name ?? "dragon";
+    this.downedFor = CONFIG.hunt.downed;
+    this.hud.showDowned(name);
+    this.hunt.pushLog(`Killed by a ${name}`, "death");
+    this.audio.death();
+  }
+
+  _goingDown(dt) {
+    this.downedFor -= dt;
+    this.player.keys.clear();
+    this.player.fireHeld = false;
+    // The view drops as the hunter goes down.
+    this.player.pitch = THREE.MathUtils.damp(this.player.pitch, -0.62, 2.2, dt);
+    if (this.downedFor > 0) return;
+
+    this.downedFor = 0;
+    this.hud.showDowned(null);
+    this.player.health = 100;
+    this.player.onFire = 0;
+    this.player.pitch = -0.1;
+    this.player.velocity.set(0, 0, 0);
+    const camp = this.world.campCenter;
+    this.player.position.set(camp.x, this.world.heightAt(camp.x, camp.z) + CONFIG.player.eye, camp.z);
+    this.demo.anchor.copy(this.player.position);
+    this.weapon.bolts = this.weapon.max;
+    this.hunt.restartFlight();
+  }
+
+  /** One roar per attack commitment, so pitch tells you which species turned in. */
+  _voices() {
+    for (const e of this.hunt.entries) {
+      const style = e.ai.attackStyle;
+      if (!style) {
+        e.lastRoar = null;
+      } else if (e.lastRoar !== style) {
+        e.lastRoar = style;
+        this.audio.roar(e.spec.mind.voice.roar, e.dragon.root.position.distanceTo(this.player.position));
+      }
+    }
   }
 
   _aimingDragon() {
     this.camera.getWorldDirection(this._look);
     this.raycaster.set(this.camera.position, this._look);
-    const hits = this.raycaster.intersectObjects(this.dragon.hitboxes, false);
-    return hits.length > 0;
+    return this.raycaster.intersectObjects(this.hunt.hitboxes, false).length > 0;
   }
 }

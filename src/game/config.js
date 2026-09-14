@@ -1,17 +1,23 @@
 export const CONFIG = {
   title: "Reign of Fire",
   worldSize: 280,
-  terrainSegments: 112,
+  // Just over a metre per quad, which is what it takes to resolve the
+  // fractured mid-scale relief in the height field rather than average it away.
+  terrainSegments: 256,
   player: {
     eye: 1.72,
     speed: 7.4,
     sprint: 12.2,
     crouch: 3.6,
-    accel: 38,
+    // Damping rate in 1/s for reaching full speed, not an acceleration in
+    // m/s². Low enough that the hunter has some weight, high enough that a
+    // sidestep away from a mortar still happens when you ask for it.
+    accel: 9,
     gravity: 22,
     jump: 8.5,
     mouse: 0.0018,
-    radius: 0.42,
+    // Half-width of the hunter for the purposes of walking into scenery.
+    radius: 0.5,
   },
   weapon: {
     bolts: 8,
@@ -20,22 +26,51 @@ export const CONFIG = {
     reload: 2.15,
     recoil: 0.034,
     cooldown: 0.62,
-    mass: 0.42,
+    // Kilograms of moving mass, near enough. Drives how far the weapon is
+    // thrown by a shot and how sluggishly it settles back onto the aim.
+    mass: 4.6,
+    damage: 85,
   },
-  dragon: {
-    hp: 1100,
-    patrolRadius: 22,
-    patrolHeight: 36,
-    flySpeed: 22,
-    diveSpeed: 38,
-    spotRange: 140,
-    breathRange: 42,
-    breathDamage: 18,
-    bodyScale: 8.2,
+  viewmodel: {
+    // Deliberately narrower than the world's 75. At the world's angle a
+    // metre-long weapon half a metre from the eye splays across the lower
+    // frame and its parallel edges skew visibly apart.
+    fov: 52,
+    near: 0.01,
+    far: 8,
+    // The weapon is modelled at true scale, but a real ballista shouldered at
+    // a real eye puts its butt plate ten centimetres from the cornea, where it
+    // fills a third of the screen. Every shooter shrinks the viewmodel a little
+    // for the same reason; this is that allowance, not a modelling error.
+    scale: 0.82,
+    // How far the weapon lags behind a fast turn, and the ceiling on that lag.
+    sway: 0.055,
+    swayMax: 0.085,
+  },
+  hunt: {
+    // Difficulty ramps by aggression and armour, not just by hit points.
+    flights: [
+      { label: "Scavengers on the slope", species: ["emberkin", "emberkin"] },
+      { label: "Forge-hot harrier", species: ["cinderwyrm"] },
+      { label: "The ridge's landlord", species: ["ashwrought"] },
+      { label: "They hunt in threes", species: ["rustwing", "rustwing", "rustwing"] },
+      { label: "Fumarole brood", species: ["sulfurmaw", "emberkin"] },
+      { label: "Something is stalking you", species: ["pale_stalker"] },
+      { label: "Walking siege", species: ["basalt_tyrant", "cinderwyrm"] },
+    ],
+    flightGap: 6,
+    corpseLinger: 9,
+    // Long enough to read who killed you, short enough not to be a punishment.
+    downed: 4.6,
+    mortarRadius: 9,
+    cloudLife: 7,
+    cloudRadius: 7,
   },
   quality: {
     targetFps: 60,
-    particleAsh: 700,
-    particleEmber: 180,
+    particleAsh: 900,
+    particleEmber: 220,
+    // Fraction of native resolution each tier rasterises at.
+    renderScale: { low: 0.55, medium: 0.78, high: 1, cinematic: 1 },
   },
 };
