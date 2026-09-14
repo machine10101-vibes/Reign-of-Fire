@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { CONFIG } from "./config.js";
 import { standardFrom, setRepeat } from "./assets.js";
+import { weaponById, tierStats } from "./armory.js";
 
 const FORWARD = new THREE.Vector3(0, 0, -1);
 const _dir = new THREE.Vector3();
@@ -169,58 +170,96 @@ const GRIP_RAKE = 0.34;
 const ARM_IN_SHOT = 0.34;
 
 export class Weapon {
-  constructor(viewmodel, textures) {
+  constructor(viewmodel, textures, specId = "ashpiercer", tier = 0) {
     this.viewmodel = viewmodel;
+    this.textures = textures;
+    this.spec = weaponById(specId);
+    this.tier = tier;
     this.group = new THREE.Group();
-    this.bolts = CONFIG.weapon.bolts;
-    this.max = CONFIG.weapon.bolts;
     this.cooldown = 0;
     this.reloadT = 0;
     this.recoil = 0;
     this.kick = 0;
     this.dry = 0;
-    // 1 while the string is back on the latch, which is also the only state the
-    // weapon can be fired from.
+    // 1 while the string is back on the latch, which is also the only state a
+    // bow can be fired from. Scatter and lance treat it as "seated".
     this.draw = 1;
     this.crankSpin = 0;
     this._sway = new THREE.Vector2();
     this._swayTarget = new THREE.Vector2();
     this._clock = 0;
-    // Held at the right hip, canted in toward the centre of the frame and
-    // pitched nose-down. Chosen by `scripts/framing.mjs` rather than by eye:
-    // the weapon is a metre long, and where a prod that wide falls relative to
-    // the reticle, and whether the hands clear the bottom edge, are arithmetic
-    // once the lens is fixed. Guessing at it cost a dozen screenshots and still
-    // left both hands below the frame.
-    this._restPos = new THREE.Vector3(0.14, -0.16, -0.78);
-    // Held square rather than canted in across the body, and that is not a
-    // stylistic choice. Swinging the muzzle inward rotates the near limb behind
-    // the stock from the eye's point of view, so all that shows of a prod
-    // two thirds of a metre across is one thin tapering limb on the far side —
-    // which is why every screenshot so far looked like a man holding a rifle.
-    // Pitched a little more nose-down so the hunter looks onto the top of the
-    // prod instead of into the butt plate, which is a white door filling the
-    // lower right of the frame.
-    this._restRot = new THREE.Euler(-0.2, -0.02, 0.06);
+    this._applyStats();
     this._pos = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
 
     this._materials(textures);
     this._build();
+    this._mount();
+    viewmodel.root.add(this.group);
+  }
+
+  _applyStats() {
+    const s = tierStats(this.spec, this.tier);
+    this.bolts = s.bolts;
+    this.max = s.bolts;
+    this.damage = s.damage;
+    this.muzzle = s.muzzle;
+    this.gravity = s.gravity;
+    this.reloadTime = s.reload;
+    this.recoilKick = s.recoil;
+    this.cooldownTime = s.cooldown;
+    this.mass = s.mass;
+    this.pellets = s.pellets;
+    this.spread = s.spread;
+    const pose = this.spec.pose;
+    this._restPos = new THREE.Vector3(...pose.pos);
+    this._restRot = new THREE.Euler(...pose.rot);
+  }
+
+  get shot() {
+    return {
+      kind: this.spec.kind,
+      damage: this.damage,
+      muzzle: this.muzzle,
+      gravity: this.gravity,
+      pellets: this.pellets,
+      spread: this.spread,
+    };
+  }
+
+  /**
+   * Tear the current mesh down and build another. The armoury calls this
+   * when the hunter buys, equips or upgrades — the viewmodel root stays put.
+   */
+  rebuild(specId, tier = 0) {
+    this.viewmodel.root.remove(this.group);
+    this.dispose();
+    this.spec = weaponById(specId);
+    this.tier = tier;
+    this.cooldown = 0;
+    this.reloadT = 0;
+    this.recoil = 0;
+    this.kick = 0;
+    this.dry = 0;
+    this.draw = 1;
+    this.crankSpin = 0;
+    this.group = new THREE.Group();
+    this._applyStats();
+    this._materials(this.textures);
+    this._build();
+    this._mount();
+    this.viewmodel.root.add(this.group);
+  }
+
+  _mount() {
     this.group.position.copy(this._restPos);
     this.group.rotation.copy(this._restRot);
-    // The scale belongs on the weapon, not on the rig above it: putting it on
-    // the parent shrinks this offset along with the model, so every attempt to
-    // push the butt away from the eye was cancelled by the shrink.
     this.group.scale.setScalar(CONFIG.viewmodel.scale);
-    // After the build, not before it. Running this on an empty group is what
-    // left all twenty-odd parts of the weapon frustum culled.
     this.group.traverse((o) => {
       o.frustumCulled = false;
       o.castShadow = false;
       o.receiveShadow = false;
     });
-    viewmodel.root.add(this.group);
   }
 
   get reloading() {
@@ -229,7 +268,7 @@ export class Weapon {
 
   /** 0 to 1 across a reload, for the HUD to draw. */
   get reloadProgress() {
-    return this.reloadT > 0 ? 1 - this.reloadT / CONFIG.weapon.reload : 1;
+    return this.reloadT > 0 ? 1 - this.reloadT / this.reloadTime : 1;
   }
 
   get empty() {
@@ -343,6 +382,14 @@ export class Weapon {
   }
 
   _build() {
+    const kind = this.spec.kind;
+    if (kind === "scatter") this._buildEmberhail();
+    else if (kind === "repeater") this._buildWidowcoil();
+    else if (kind === "lance") this._buildHellharpoon();
+    else this._buildAshpiercer();
+  }
+
+  _buildAshpiercer() {
     this._buildStock();
     this._buildBarrel();
     this._buildLimbs();
@@ -977,6 +1024,231 @@ export class Weapon {
     return joints;
   }
 
+  /**
+   * Emberhail: a flared dragon-shot lock. Short, fat, leather-wrapped, with
+   * a muzzle that reads as a funnel rather than a rifle barrel.
+   */
+  _buildEmberhail() {
+    const m = this.mats;
+    this._add(
+      profileSolid(
+        [
+          [-0.28, 0.03],
+          [0.02, 0.05],
+          [0.16, 0.07],
+          [0.22, 0.02],
+          [0.2, -0.055],
+          [0.08, -0.05],
+          [0.0, -0.028],
+          [-0.28, -0.03],
+        ],
+        0.052
+      ),
+      m.wood
+    );
+    this._add(
+      lathe([
+        [0.0, 0.18],
+        [0.038, 0.18],
+        [0.04, 0.28],
+        [0.048, 0.34],
+        [0.062, 0.4],
+        [0.078, 0.44],
+        [0.042, 0.45],
+        [0.0, 0.445],
+      ]),
+      m.iron
+    );
+    this._add(new THREE.CylinderGeometry(0.042, 0.046, 0.14, 12), m.leather, [0, 0.0, -0.3], [Math.PI / 2, 0, 0]);
+    for (const z of [-0.24, -0.32, -0.4]) {
+      this._add(new THREE.TorusGeometry(0.046, 0.006, 6, 12), m.brass, [0, 0.0, z], [Math.PI / 2, 0, 0]);
+    }
+    this._add(roundedBlock(0.09, 0.04, 0.04, 0.008), m.iron, [0.03, 0.01, 0.06]);
+    this.trigger = this._add(roundedBlock(0.012, 0.034, 0.01, 0.004), m.steel, TRIGGER, [0, 0, 0.2]);
+    this._add(
+      new THREE.TorusGeometry(0.03, 0.005, 6, 14, Math.PI * 1.1),
+      m.blued,
+      [0, TRIGGER[1], TRIGGER[2]],
+      [0, Math.PI / 2, -0.4]
+    );
+    this.rearSight = this._add(new THREE.TorusGeometry(0.012, 0.003, 6, 12), m.blued, [0, 0.07, -0.08]);
+    this._add(roundedBlock(0.012, 0.03, 0.008, 0.003), m.blued, [0, 0.052, -0.08]);
+    this.bolt = new THREE.Group();
+    this.bolt.position.set(0, 0.012, -0.2);
+    this.group.add(this.bolt);
+    this._add(new THREE.CylinderGeometry(0.016, 0.014, 0.05, 8), m.brass, [0, 0, 0], [Math.PI / 2, 0, 0], this.bolt);
+    this.muzzleLocal = [0, 0.0, -0.45];
+    this.grip = this._grip(GRIP, 0.023, 0.12, GRIP_RAKE);
+    this.foregrip = this._grip(FOREGRIP, 0.02, 0.1, -0.1);
+    this._buildArms();
+  }
+
+  /**
+   * Widow's Coil: a boxed repeating arbalest. Smaller prod, a magazine on
+   * top, a side crank — the silhouette of something that feeds itself.
+   */
+  _buildWidowcoil() {
+    const m = this.mats;
+    const tipX = 0.24;
+    const tipY = 0.046;
+    const tipZ = -0.42;
+    const rootZ = -0.46;
+    this.stringY = tipY;
+    this.stringRestZ = tipZ;
+    this.stringLatchZ = -0.12;
+    this._add(
+      profileSolid(
+        [
+          [-0.28, 0.032],
+          [0.0, 0.04],
+          [0.1, 0.068],
+          [0.2, 0.03],
+          [0.21, -0.05],
+          [0.12, -0.058],
+          [0.02, -0.03],
+          [-0.28, -0.028],
+        ],
+        0.044
+      ),
+      m.wood
+    );
+    this._add(roundedBlock(0.12, 0.07, 0.07, 0.008), m.iron, [0, 0.04, rootZ]);
+    this._add(roundedBlock(0.09, 0.08, 0.05, 0.006), m.blued, [0, 0.072, -0.18]);
+    for (let i = 0; i < 4; i++) {
+      this._add(new THREE.CylinderGeometry(0.006, 0.006, 0.16, 5), m.wood, [0.018, 0.07 - i * 0.012, -0.18], [Math.PI / 2, 0, 0]);
+    }
+    this.limbs = [];
+    for (const side of [-1, 1]) {
+      const path = [
+        [side * 0.03, tipY + 0.004, rootZ],
+        [side * 0.1, tipY + 0.006, rootZ - 0.02],
+        [side * 0.18, tipY + 0.002, rootZ - 0.034],
+        [side * tipX, tipY, tipZ],
+      ];
+      this.limbs.push(
+        this._add(
+          sweep(path, {
+            steps: 18,
+            radial: 8,
+            radius: (t) => 0.018 * (1 - t * 0.2) + 0.006,
+            flatten: 0.48,
+          }),
+          m.wood
+        )
+      );
+    }
+    const geo = new THREE.CylinderGeometry(0.0024, 0.0024, 1, 5, 1, true);
+    geo.rotateX(Math.PI / 2);
+    geo.translate(0, 0, -0.5);
+    this.stringSides = [];
+    for (const side of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(side * tipX, tipY, tipZ);
+      this.group.add(pivot);
+      const mesh = new THREE.Mesh(geo, m.cord);
+      pivot.add(mesh);
+      this.stringSides.push({ pivot, mesh });
+    }
+    this.serving = this._add(
+      new THREE.CylinderGeometry(0.004, 0.004, 0.04, 6),
+      m.leather,
+      [0, tipY, this.stringLatchZ],
+      [0, 0, Math.PI / 2]
+    );
+    this.trigger = this._add(roundedBlock(0.01, 0.032, 0.008, 0.004), m.steel, TRIGGER, [0, 0, 0.18]);
+    this._add(
+      new THREE.TorusGeometry(0.028, 0.0045, 6, 14, Math.PI * 1.1),
+      m.blued,
+      [0, TRIGGER[1], TRIGGER[2]],
+      [0, Math.PI / 2, -0.4]
+    );
+    this.rearSight = this._add(new THREE.TorusGeometry(0.012, 0.003, 6, 12), m.blued, [0, 0.078, -0.04]);
+    this.crank = new THREE.Group();
+    this.crank.position.set(0.04, 0.0, 0.02);
+    this.group.add(this.crank);
+    this._add(new THREE.CylinderGeometry(0.022, 0.022, 0.008, 12), m.iron, null, [0, 0, Math.PI / 2], this.crank);
+    this._add(roundedBlock(0.036, 0.01, 0.007, 0.003), m.iron, [0, 0.016, 0.004], [0, 0, Math.PI / 2], this.crank);
+    this.bolt = new THREE.Group();
+    this.bolt.position.set(0, tipY, 0);
+    this.group.add(this.bolt);
+    this._add(new THREE.CylinderGeometry(0.006, 0.007, 0.32, 6), m.wood, [0, 0, -0.28], [Math.PI / 2, 0, 0], this.bolt);
+    this._add(new THREE.ConeGeometry(0.01, 0.04, 5), m.steel, [0, 0, -0.46], [Math.PI / 2, 0, 0], this.bolt);
+    this.muzzleLocal = [0, tipY, -0.5];
+    this.grip = this._grip(GRIP, 0.022, 0.118, GRIP_RAKE);
+    this.foregrip = this._grip(FOREGRIP, 0.019, 0.095, -0.1);
+    this._buildArms();
+  }
+
+  /**
+   * Hellharpoon: a long fire lance. Tube, ember vents, a spear seated on
+   * top. The heaviest thing in the armoury, and it looks it.
+   */
+  _buildHellharpoon() {
+    const m = this.mats;
+    this._add(
+      profileSolid(
+        [
+          [-0.42, 0.028],
+          [-0.05, 0.04],
+          [0.12, 0.072],
+          [0.24, 0.03],
+          [0.25, -0.055],
+          [0.14, -0.06],
+          [0.02, -0.032],
+          [-0.42, -0.026],
+        ],
+        0.05
+      ),
+      m.wood
+    );
+    this._add(
+      lathe([
+        [0.0, 0.22],
+        [0.03, 0.22],
+        [0.032, 0.55],
+        [0.036, 0.72],
+        [0.042, 0.78],
+        [0.028, 0.8],
+        [0.0, 0.795],
+      ]),
+      m.iron
+    );
+    this._add(new THREE.TorusGeometry(0.04, 0.008, 6, 14), m.brass, [0, 0.0, -0.78], [Math.PI / 2, 0, 0]);
+    for (let i = 0; i < 5; i++) {
+      this._add(roundedBlock(0.028, 0.01, 0.008, 0.003), m.blued, [0.03, 0.0, -0.32 - i * 0.08]);
+    }
+    const glow = new THREE.Mesh(
+      new THREE.TorusGeometry(0.03, 0.006, 6, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0xff6a1a,
+        emissive: 0xff4a10,
+        emissiveIntensity: 1.4,
+        metalness: 0.2,
+        roughness: 0.4,
+      })
+    );
+    glow.rotation.x = Math.PI / 2;
+    glow.position.set(0, 0.0, -0.79);
+    this.group.add(glow);
+    this.trigger = this._add(roundedBlock(0.012, 0.036, 0.01, 0.004), m.steel, TRIGGER, [0, 0, 0.2]);
+    this._add(
+      new THREE.TorusGeometry(0.03, 0.005, 6, 14, Math.PI * 1.1),
+      m.blued,
+      [0, TRIGGER[1], TRIGGER[2]],
+      [0, Math.PI / 2, -0.4]
+    );
+    this.rearSight = this._add(new THREE.TorusGeometry(0.014, 0.003, 6, 12), m.blued, [0, 0.074, -0.06]);
+    this.bolt = new THREE.Group();
+    this.bolt.position.set(0, 0.046, 0);
+    this.group.add(this.bolt);
+    this._add(new THREE.CylinderGeometry(0.012, 0.01, 0.72, 7), m.steel, [0, 0, -0.5], [Math.PI / 2, 0, 0], this.bolt);
+    this._add(new THREE.ConeGeometry(0.022, 0.1, 5), m.steel, [0, 0, -0.88], [Math.PI / 2, 0, 0], this.bolt);
+    this.muzzleLocal = [0, 0.0, -0.8];
+    this.grip = this._grip(GRIP, 0.024, 0.13, GRIP_RAKE);
+    this.foregrip = this._grip(FOREGRIP, 0.021, 0.11, -0.08);
+    this._buildArms();
+  }
+
   // ------------------------------------------------------------------- firing
 
   /**
@@ -985,7 +1257,8 @@ export class Weapon {
    * world is the hunter's camera applied to it.
    */
   muzzleWorld(out) {
-    this._muzzle.set(0, CHANNEL_Y, MUZZLE_Z);
+    const p = this.muzzleLocal ?? [0, CHANNEL_Y, MUZZLE_Z];
+    this._muzzle.set(p[0], p[1], p[2]);
     this.group.localToWorld(this._muzzle);
     return this.viewmodel.toWorld(this._muzzle, out);
   }
@@ -999,9 +1272,9 @@ export class Weapon {
       return false;
     }
     this.bolts -= 1;
-    this.cooldown = CONFIG.weapon.cooldown;
+    this.cooldown = this.cooldownTime;
     // A heavier weapon is thrown less by the same shot, and settles slower.
-    this.recoil = CONFIG.weapon.recoil * (4.6 / CONFIG.weapon.mass);
+    this.recoil = this.recoilKick * (4.6 / this.mass);
     this.kick = 1;
     this.draw = 0;
     this.bolt.visible = false;
@@ -1011,7 +1284,7 @@ export class Weapon {
 
   tryReload() {
     if (this.reloading || this.bolts === this.max) return false;
-    this.reloadT = CONFIG.weapon.reload;
+    this.reloadT = this.reloadTime;
     return true;
   }
 
@@ -1024,12 +1297,13 @@ export class Weapon {
    * which is why the quiver refilling felt like a page reloading.
    */
   _reloadPose(dt) {
-    const t = 1 - this.reloadT / CONFIG.weapon.reload;
+    const t = 1 - this.reloadT / this.reloadTime;
     const off = THREE.MathUtils.smoothstep(t, 0, 0.18) - THREE.MathUtils.smoothstep(t, 0.82, 1);
 
+    const winds = this.spec.kind === "ballista" || this.spec.kind === "repeater";
     const wind = THREE.MathUtils.smoothstep(t, 0.2, 0.68);
-    this.draw = wind;
-    if (wind > 0 && wind < 1) this.crankSpin += dt * 15;
+    this.draw = winds ? wind : THREE.MathUtils.smoothstep(t, 0.35, 0.82);
+    if (winds && wind > 0 && wind < 1) this.crankSpin += dt * 15;
 
     // The bolt is seated once the string is latched, not at the very end.
     const seat = THREE.MathUtils.smoothstep(t, 0.7, 0.86);
@@ -1073,7 +1347,7 @@ export class Weapon {
         this.bolt.position.set(0, CHANNEL_Y, 0);
       }
       this._poseString();
-      this.crank.rotation.x = this.crankSpin;
+      if (this.crank) this.crank.rotation.x = this.crankSpin;
       return;
     }
 
@@ -1096,7 +1370,7 @@ export class Weapon {
     } else {
       this._swayTarget.set(0, 0);
     }
-    const settle = 6.5 * (4.6 / CONFIG.weapon.mass);
+    const settle = 6.5 * (4.6 / this.mass);
     this._sway.x = THREE.MathUtils.damp(this._sway.x, this._swayTarget.x, settle, dt);
     this._sway.y = THREE.MathUtils.damp(this._sway.y, this._swayTarget.y, settle, dt);
 
@@ -1133,7 +1407,7 @@ export class Weapon {
     );
 
     this._poseString();
-    this.crank.rotation.x = this.crankSpin;
+    if (this.crank) this.crank.rotation.x = this.crankSpin;
   }
 
   /**
@@ -1142,16 +1416,18 @@ export class Weapon {
    * of thing that looks wrong before anyone can say why.
    */
   _poseString() {
-    const z = THREE.MathUtils.lerp(STRING_REST_Z, STRING_LATCH_Z, this.draw);
-    this.serving.position.z = z;
+    if (!this.stringSides?.length) return;
+    const z = THREE.MathUtils.lerp(this.stringRestZ ?? STRING_REST_Z, this.stringLatchZ ?? STRING_LATCH_Z, this.draw);
+    const y = this.stringY ?? LIMB_TIP[1];
+    if (this.serving) this.serving.position.z = z;
     for (const { pivot, mesh } of this.stringSides) {
-      _dir.set(-pivot.position.x, LIMB_TIP[1] - pivot.position.y, z - pivot.position.z);
+      _dir.set(-pivot.position.x, y - pivot.position.y, z - pivot.position.z);
       const len = _dir.length();
       pivot.quaternion.setFromUnitVectors(FORWARD, _dir.divideScalar(len));
       mesh.scale.z = len;
     }
     // The limbs draw in as the string comes onto the latch.
-    for (const limb of this.limbs) limb.scale.z = 1 - this.draw * 0.03;
+    for (const limb of this.limbs ?? []) limb.scale.z = 1 - this.draw * 0.03;
   }
 
   dispose() {

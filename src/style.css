@@ -26,6 +26,10 @@ body {
   cursor: none;
 }
 
+body.shop-open {
+  cursor: default;
+}
+
 #gl {
   display: block;
 }
@@ -368,6 +372,11 @@ h1 {
   opacity: 1;
 }
 
+#kill-log li.shop {
+  color: #e8c8a2;
+  opacity: 0.9;
+}
+
 #codex {
   margin: 22px auto 4px;
   max-width: 460px;
@@ -501,4 +510,159 @@ h1 {
   letter-spacing: 0.24em;
   text-transform: uppercase;
   opacity: 0.6;
+}
+
+#shop {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 4, 3, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+#shop.hidden {
+  display: none;
+}
+
+#shop-panel {
+  width: min(920px, 92vw);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 22px 26px 18px;
+  color: var(--ash);
+  background: linear-gradient(180deg, rgba(16, 11, 9, 0.94), rgba(10, 7, 6, 0.9));
+  border: 1px solid rgba(201, 184, 166, 0.2);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+#shop-head {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 18px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+#shop-head h2 {
+  font-size: 22px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+#shop-gold {
+  color: var(--ember);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-size: 14px;
+}
+
+#shop-head button,
+.shop-actions button {
+  border: 1px solid var(--ember);
+  background: transparent;
+  color: var(--ash);
+  padding: 8px 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+#shop-head button:hover,
+.shop-actions button:hover:not(:disabled) {
+  background: rgba(255, 106, 26, 0.16);
+}
+
+.shop-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+#shop-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.shop-card {
+  padding: 14px 16px;
+  border: 1px solid rgba(201, 184, 166, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.shop-card.is-equipped {
+  border-color: rgba(255, 106, 26, 0.55);
+}
+
+.shop-card h3 {
+  font-size: 16px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.shop-epithet {
+  color: var(--ember);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.shop-tier {
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.shop-blurb {
+  margin: 10px 0 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.82;
+}
+
+.shop-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  list-style: none;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-bottom: 12px;
+}
+
+.shop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.shop-equipped,
+.shop-max {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ember);
+}
+
+#shop-foot {
+  margin-top: 16px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  #shop-list {
+    grid-template-columns: 1fr;
+  }
 }

@@ -34,6 +34,17 @@ export class Combat {
     });
     this.tipGeo = new THREE.ConeGeometry(0.04, 0.12, 6);
     this.tipGeo.rotateX(-Math.PI / 2);
+    this.shotGeo = new THREE.SphereGeometry(0.04, 6, 5);
+    this.shotMat = new THREE.MeshStandardMaterial({
+      color: 0x6a5a48,
+      metalness: 0.55,
+      roughness: 0.45,
+      emissive: new THREE.Color(0x331800),
+    });
+    this.harpoonGeo = new THREE.CylinderGeometry(0.035, 0.028, 1.15, 7);
+    this.harpoonGeo.rotateX(Math.PI / 2);
+    this.harpoonTip = new THREE.ConeGeometry(0.07, 0.22, 6);
+    this.harpoonTip.rotateX(-Math.PI / 2);
 
     this.mortarGeo = new THREE.IcosahedronGeometry(0.9, 1);
     this.mortarMat = new THREE.MeshStandardMaterial({
@@ -47,20 +58,50 @@ export class Combat {
     this.waveGeo.rotateX(-Math.PI / 2);
   }
 
-  fire(origin, direction) {
+  fire(origin, direction, shot = {}) {
+    const pellets = Math.max(1, shot.pellets ?? 1);
+    const spread = shot.spread ?? 0;
+    const damage = shot.damage ?? CONFIG.weapon.damage;
+    const speed = shot.muzzle ?? CONFIG.weapon.muzzle;
+    const gravity = shot.gravity ?? CONFIG.weapon.gravity;
+    const kind = shot.kind ?? "ballista";
+    for (let i = 0; i < pellets; i++) {
+      const dir = direction.clone().normalize();
+      if (spread > 0) {
+        dir.x += (Math.random() - 0.5) * 2 * spread;
+        dir.y += (Math.random() - 0.5) * 2 * spread;
+        dir.normalize();
+      }
+      const mesh = this._projectile(kind);
+      mesh.position.copy(origin);
+      mesh.lookAt(origin.clone().add(dir));
+      this.scene.add(mesh);
+      this.bolts.push({
+        mesh,
+        vel: dir.multiplyScalar(speed),
+        life: kind === "lance" ? 4.2 : 3.2,
+        damage,
+        gravity,
+      });
+    }
+  }
+
+  _projectile(kind) {
     const mesh = new THREE.Group();
-    mesh.add(new THREE.Mesh(this.boltGeo, this.boltMat));
-    const tip = new THREE.Mesh(this.tipGeo, this.boltMat);
-    tip.position.z = -0.32;
-    mesh.add(tip);
-    mesh.position.copy(origin);
-    mesh.lookAt(origin.clone().add(direction));
-    this.scene.add(mesh);
-    this.bolts.push({
-      mesh,
-      vel: direction.clone().normalize().multiplyScalar(CONFIG.weapon.muzzle),
-      life: 3.2,
-    });
+    if (kind === "scatter") {
+      mesh.add(new THREE.Mesh(this.shotGeo, this.shotMat));
+    } else if (kind === "lance") {
+      mesh.add(new THREE.Mesh(this.harpoonGeo, this.boltMat));
+      const tip = new THREE.Mesh(this.harpoonTip, this.boltMat);
+      tip.position.z = -0.68;
+      mesh.add(tip);
+    } else {
+      mesh.add(new THREE.Mesh(this.boltGeo, this.boltMat));
+      const tip = new THREE.Mesh(this.tipGeo, this.boltMat);
+      tip.position.z = -0.32;
+      mesh.add(tip);
+    }
+    return mesh;
   }
 
   // --------------------------------------------------------- AI-driven attacks
@@ -143,7 +184,7 @@ export class Combat {
     const boxes = this.hunt.hitboxes;
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i];
-      b.vel.y -= CONFIG.weapon.gravity * dt;
+      b.vel.y -= (b.gravity ?? CONFIG.weapon.gravity) * dt;
       b.mesh.position.addScaledVector(b.vel, dt);
       b.mesh.lookAt(_v.copy(b.mesh.position).add(b.vel));
       b.life -= dt;
@@ -154,7 +195,7 @@ export class Combat {
         if (!this._sphereHit(pos, box, 0.8)) continue;
         const info = box.userData.hit;
         const dragon = info.dragon;
-        const dealt = dragon.takeDamage(CONFIG.weapon.damage * info.multiplier, info.name);
+        const dealt = dragon.takeDamage((b.damage ?? CONFIG.weapon.damage) * info.multiplier, info.name);
         box.getWorldPosition(this._hit);
         _n.copy(this._hit).sub(pos).normalize().multiplyScalar(-1);
         this.particles.bloodHit(pos.clone(), _n);

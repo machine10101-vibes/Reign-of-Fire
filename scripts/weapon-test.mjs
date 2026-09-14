@@ -12,6 +12,7 @@ import * as THREE from "three";
 
 import { CONFIG } from "../src/game/config.js";
 import { Weapon, sweep } from "../src/game/Weapon.js";
+import { WEAPON_ORDER } from "../src/game/armory.js";
 
 const MAPS = ["albedo", "normal", "roughness", "metallic", "ao", "emissive"];
 
@@ -395,6 +396,31 @@ const loping = meanHeight({ moving: true, sprinting: true, turnRate: null });
 expect(loping < level - 0.03, "the weapon is not dropped out of the aim at a sprint");
 
 weapon.dispose();
+viewmodel.root.clear();
+
+// Every armoury piece has to build: hands on grips, nothing culled, a
+// muzzle that is actually in front of the eye. The Ashpiercer's string
+// and prod checks stay above; a scatter lock has no string to fail.
+for (const id of WEAPON_ORDER) {
+  const other = new Weapon(viewmodel, textures, id, 0);
+  other.group.updateMatrixWorld(true);
+  const parts = [];
+  other.group.traverse((o) => {
+    if (o.isMesh) parts.push(o);
+  });
+  expect(parts.length > 18, `${id} built only ${parts.length} meshes`);
+  expect(
+    parts.every((p) => !p.frustumCulled),
+    `${id} still has frustum-culled parts`
+  );
+  expect(other.rightArm && other.leftArm, `${id} has no arms`);
+  expect(other.grip && other.foregrip, `${id} has no grips`);
+  const muzzle = new THREE.Vector3();
+  other.muzzleWorld(muzzle);
+  expect(muzzle.z < -0.3, `${id} muzzle is at z=${muzzle.z.toFixed(3)}`);
+  viewmodel.root.remove(other.group);
+  other.dispose();
+}
 
 if (errors.length) {
   console.error(`Weapon test failed:\n  ${errors.join("\n  ")}`);

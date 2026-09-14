@@ -15,6 +15,7 @@ export class HUD {
   constructor() {
     this.hp = document.getElementById("hp-fill");
     this.bolts = document.getElementById("bolts");
+    this.weaponName = document.getElementById("weapon-name");
     this.reload = document.getElementById("reload");
     this.reloadFill = document.getElementById("reload-fill");
     this.beast = document.getElementById("beast-fill");
@@ -133,10 +134,13 @@ export class HUD {
       heat,
       reloading,
       reloadProgress,
+      weaponName,
+      ammoLabel,
     } = state;
 
     this.hp.style.width = `${Math.max(0, health)}%`;
-    this.bolts.textContent = `${bolts} / ${maxBolts}`;
+    if (this.weaponName && weaponName) this.weaponName.textContent = weaponName;
+    this.bolts.textContent = ammoLabel ? `${bolts} / ${maxBolts} ${ammoLabel}` : `${bolts} / ${maxBolts}`;
     // Empty and reloading are the two states the dragons watch for — the AI
     // presses the attack during both — so the hunter has to be able to see
     // them too.

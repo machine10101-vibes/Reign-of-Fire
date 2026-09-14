@@ -147,6 +147,15 @@ export class Hunt {
     this.logDirty = true;
   }
 
+  /** Pays the armoury. Bounty is earned gold, not a high score. */
+  spend(amount, reason) {
+    if (amount <= 0) return true;
+    if (this.bounty < amount) return false;
+    this.bounty -= amount;
+    if (reason) this.pushLog(reason, "shop");
+    return true;
+  }
+
   update(dt, player, weapon) {
     const playerVulnerable = weapon.bolts === 0 || weapon.reloading;
     let alliesAttacking = 0;
