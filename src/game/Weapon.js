@@ -192,7 +192,7 @@ export class Weapon {
     // the reticle, and whether the hands clear the bottom edge, are arithmetic
     // once the lens is fixed. Guessing at it cost a dozen screenshots and still
     // left both hands below the frame.
-    this._restPos = new THREE.Vector3(0.14, -0.16, -0.8);
+    this._restPos = new THREE.Vector3(0.14, -0.16, -0.78);
     // Held square rather than canted in across the body, and that is not a
     // stylistic choice. Swinging the muzzle inward rotates the near limb behind
     // the stock from the eye's point of view, so all that shows of a prod
@@ -201,7 +201,7 @@ export class Weapon {
     // Pitched a little more nose-down so the hunter looks onto the top of the
     // prod instead of into the butt plate, which is a white door filling the
     // lower right of the frame.
-    this._restRot = new THREE.Euler(-0.24, -0.02, 0.08);
+    this._restRot = new THREE.Euler(-0.2, -0.02, 0.06);
     this._pos = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
 
@@ -364,13 +364,13 @@ export class Weapon {
     const stock = [
       [-0.34, 0.038],
       [-0.02, 0.044],
-      [0.08, 0.082],
-      [0.22, 0.074],
-      [0.3, 0.042],
-      [0.312, -0.058],
-      [0.24, -0.072],
-      [0.15, -0.062],
-      [0.08, -0.03],
+      [0.06, 0.08],
+      [0.14, 0.084],
+      [0.22, 0.032],
+      [0.255, -0.018],
+      [0.235, -0.068],
+      [0.16, -0.072],
+      [0.08, -0.032],
       [0.02, -0.042],
       [-0.02, -0.046],
       [-0.34, -0.04],
@@ -409,12 +409,12 @@ export class Weapon {
     // A flat plate there is a door filling the lower-right of the frame
     // the moment the hunter looks down the tiller.
     for (const side of [-1, 1]) {
-      this._add(roundedBlock(0.02, 0.088, 0.004, 0.006), m.blued, [side * 0.026, -0.008, 0.296]);
-      this._add(roundedBlock(0.12, 0.055, 0.005, 0.012), m.wood, [side * 0.026, 0.028, 0.19]);
+      this._add(roundedBlock(0.018, 0.07, 0.004, 0.006), m.blued, [side * 0.026, -0.012, 0.228]);
+      this._add(roundedBlock(0.1, 0.048, 0.005, 0.012), m.wood, [side * 0.026, 0.032, 0.15]);
       this._add(
         new THREE.TorusGeometry(0.011, 0.003, 5, 10),
         m.iron,
-        [side * 0.026, -0.052, 0.235],
+        [side * 0.026, -0.052, 0.185],
         [0, Math.PI / 2, 0]
       );
     }
