@@ -65,21 +65,27 @@ const of = (object, offset) => {
 const rearHand = weapon.rightArm.children[weapon.rightArm.children.length - 1];
 const frontHand = weapon.leftArm.children[weapon.leftArm.children.length - 1];
 
+// Read off the parts themselves, so this reports the weapon as built rather
+// than as it was when the landmarks were last written down.
+const box = new THREE.Box3().setFromObject(weapon.group);
+const muzzle = weapon.muzzleWorld(new THREE.Vector3());
+const tipLeft = of(weapon.stringSides[0].pivot);
+const tipRight = of(weapon.stringSides[1].pivot);
 const landmarks = {
-  butt: local(0, -0.006, 0.311),
-  receiver: local(0, 0.048, 0),
-  prod: local(0, 0.044, -0.45),
-  muzzle: local(0, 0.048, -0.74),
-  limbTipLeft: local(-0.335, 0.044, -0.452),
-  limbTipRight: local(0.335, 0.044, -0.452),
-  rearSight: local(0, 0.084, -0.03),
+  trigger: of(weapon.trigger),
+  rearSight: of(weapon.rearSight),
+  latch: of(weapon.serving),
+  boltNock: of(weapon.bolt),
+  prodCentre: tipLeft.clone().add(tipRight).multiplyScalar(0.5),
+  limbTipLeft: tipLeft,
+  limbTipRight: tipRight,
+  muzzle,
   rearHand: of(rearHand),
   frontHand: of(frontHand),
   rightElbow: of(weapon.rightArm, weapon.rightArm.userData.elbow),
   leftElbow: of(weapon.leftArm, weapon.leftArm.userData.elbow),
 };
 
-const box = new THREE.Box3().setFromObject(weapon.group);
 const corners = [];
 for (let i = 0; i < 8; i++) {
   corners.push(
@@ -104,4 +110,7 @@ for (const [name, point] of Object.entries(landmarks)) {
   );
 }
 const tops = corners.map((c) => frame(c).down);
-console.log(`silhouette    highest ${Math.min(...tops).toFixed(3)}  lowest ${Math.max(...tops).toFixed(3)}`);
+console.log(
+  `silhouette    highest ${Math.min(...tops).toFixed(3)}  lowest ${Math.max(...tops).toFixed(3)}  ` +
+    `nearest ${(-box.max.z).toFixed(3)}m`
+);

@@ -42,7 +42,7 @@ export const CONFIG = {
     // a real eye puts its butt plate ten centimetres from the cornea, where it
     // fills a third of the screen. Every shooter shrinks the viewmodel a little
     // for the same reason; this is that allowance, not a modelling error.
-    scale: 0.8,
+    scale: 0.82,
     // How far the weapon lags behind a fast turn, and the ceiling on that lag.
     sway: 0.055,
     swayMax: 0.085,

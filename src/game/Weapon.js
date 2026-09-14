@@ -141,11 +141,15 @@ function roundedBlock(length, height, width, radius = 0.006) {
 // limb tips and the loaded bolt all have to sit on the same line, or the
 // weapon is drawn shooting past its own string.
 const CHANNEL_Y = 0.048;
-const LIMB_ROOT_Z = -0.5;
+// The prod belongs at the front of the stock, where a crossbow carries it.
+// Mounted two thirds along, as it was, its near limb passed across the
+// receiver in screen space and was lost against it — leaving one thin tapering
+// limb on the far side and a weapon that read as a rifle.
+const LIMB_ROOT_Z = -0.6;
 const STRING_LATCH_Z = -0.165;
-const STRING_REST_Z = -0.545;
+const STRING_REST_Z = -0.552;
 const MUZZLE_Z = -0.74;
-const LIMB_TIP = [0.335, CHANNEL_Y - 0.004, -0.452];
+const LIMB_TIP = [0.335, CHANNEL_Y - 0.004, -0.552];
 const SIGHT_Y = 0.084;
 // The trigger, and the grip behind it. These two belong together: the first
 // version had the grip ten centimetres behind its own trigger, which is a
@@ -187,8 +191,13 @@ export class Weapon {
     // the reticle, and whether the hands clear the bottom edge, are arithmetic
     // once the lens is fixed. Guessing at it cost a dozen screenshots and still
     // left both hands below the frame.
-    this._restPos = new THREE.Vector3(0.18, -0.12, -0.64);
-    this._restRot = new THREE.Euler(-0.24, 0.36, 0.05);
+    this._restPos = new THREE.Vector3(0.14, -0.14, -0.74);
+    // Held square rather than canted in across the body, and that is not a
+    // stylistic choice. Swinging the muzzle inward rotates the near limb behind
+    // the stock from the eye's point of view, so all that shows of a prod
+    // two thirds of a metre across is one thin tapering limb on the far side —
+    // which is why every screenshot so far looked like a man holding a rifle.
+    this._restRot = new THREE.Euler(-0.12, -0.02, 0.05);
     this._pos = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
 
@@ -226,16 +235,20 @@ export class Weapon {
   _materials(textures) {
     const pack = (stem, u, v) => setRepeat(textures.pack(stem, { clone: true }), u, v);
     this.mats = {
+      // Metalness held below the nine-tenths these would really have. A fully
+      // metallic surface has no diffuse term at all, so on a ridge at dusk,
+      // with nothing in the environment map brighter than the lava, the entire
+      // weapon came out as a silhouette with one specular streak on it.
       iron: standardFrom(pack("weapon_metal", 3, 1.4), {
         color: 0x6e6a66,
-        metalness: 0.92,
-        roughness: 0.42,
+        metalness: 0.78,
+        roughness: 0.45,
         envMapIntensity: 1.1,
       }),
       steel: standardFrom(pack("weapon_metal", 1.6, 1.6), {
-        color: 0x8d8a88,
-        metalness: 0.96,
-        roughness: 0.28,
+        color: 0x9d9a97,
+        metalness: 0.84,
+        roughness: 0.3,
         envMapIntensity: 1.35,
       }),
       // Oil-dark walnut. The first pass used a mid tan, and with the key light
@@ -269,8 +282,8 @@ export class Weapon {
       cord: new THREE.MeshStandardMaterial({ color: 0xb3a58c, metalness: 0, roughness: 0.64 }),
       blued: new THREE.MeshStandardMaterial({
         color: 0x2b2723,
-        metalness: 0.88,
-        roughness: 0.36,
+        metalness: 0.72,
+        roughness: 0.38,
         envMapIntensity: 0.9,
       }),
     };
@@ -558,7 +571,7 @@ export class Weapon {
     // in mid air above the receiver, attached to nothing.
     this._add(roundedBlock(0.03, 0.014, 0.03, 0.005), m.blued, [0, 0.056, -0.03]);
     this._add(roundedBlock(0.016, 0.04, 0.014, 0.004), m.blued, [0, SIGHT_Y - 0.024, -0.03]);
-    this._add(new THREE.TorusGeometry(0.016, 0.0035, 6, 14), m.blued, [0, SIGHT_Y, -0.03]);
+    this.rearSight = this._add(new THREE.TorusGeometry(0.016, 0.0035, 6, 14), m.blued, [0, SIGHT_Y, -0.03]);
 
     // Front blade with a brass bead, the one part of the sight picture that
     // has to stay findable at dusk. Both posts start above the bolt's path.
@@ -919,15 +932,18 @@ export class Weapon {
     this.bolt.visible = seat > 0.02;
     this.bolt.position.set(0, CHANNEL_Y + (1 - seat) * 0.1, (1 - seat) * 0.16);
 
+    // Dropped off the aim, but not out of the frame. The first version took it
+    // down thirteen centimetres, which left nothing on screen but the prod and
+    // made the one animation the player watches eight times a flight invisible.
     this._pos.copy(this._restPos);
-    this._pos.y -= off * 0.13;
-    this._pos.z += off * 0.05;
+    this._pos.y -= off * 0.055;
+    this._pos.z += off * 0.03;
     this.group.position.copy(this._pos);
     this.group.rotation.set(
-      this._restRot.x + off * 0.42,
-      this._restRot.y - off * 0.3,
+      this._restRot.x + off * 0.3,
+      this._restRot.y - off * 0.22,
       // A shudder through the wrist while the windlass is under load.
-      this._restRot.z + off * 0.26 + Math.sin(t * Math.PI * 9) * off * 0.022
+      this._restRot.z + off * 0.2 + Math.sin(t * Math.PI * 9) * off * 0.022
     );
   }
 
@@ -994,8 +1010,8 @@ export class Weapon {
     // Dropped out of the aim at a sprint, tucked up when crouched.
     const loping = sprinting && moving;
     if (loping) {
-      this._pos.y -= 0.075;
-      this._pos.z += 0.035;
+      this._pos.y -= 0.042;
+      this._pos.z += 0.03;
     }
     if (crouching) this._pos.y += 0.014;
     // Brought toward the eye line when there is something worth shooting.

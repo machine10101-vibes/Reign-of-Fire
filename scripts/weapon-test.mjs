@@ -272,15 +272,48 @@ for (const [name, arm] of [
   expect(fraction > 0.55 && fraction < 0.94, `${name} hand is ${fraction.toFixed(2)} down the frame`);
   expect(Math.abs(seen.x) < 0.95, `${name} hand is off the side of the frame`);
 }
-// The prod clear of the reticle but not off the bottom, and both limb tips in
-// shot: a crossbow seen end-on is indistinguishable from a rifle.
-expect(down(0, 0.044, -0.45) > 0.56, "the prod crosses the reticle");
-for (const side of [-1, 1]) {
-  const tip = new THREE.Vector3(side * 0.335, 0.044, -0.452)
-    .applyMatrix4(weapon.group.matrixWorld)
-    .project(camera);
-  expect(Math.abs(tip.x) < 0.94, `the ${side < 0 ? "left" : "right"} limb tip is out of shot`);
+/** How far down the frame the rear hand sits in the weapon's current pose. */
+function handInFrame() {
+  weapon.group.updateMatrixWorld(true);
+  const hand = weapon.rightArm.children[weapon.rightArm.children.length - 1];
+  const seen = new THREE.Vector3().setFromMatrixPosition(hand.matrixWorld).project(camera);
+  return (1 - seen.y) / 2;
 }
+// Mid-reload and at a sprint the weapon comes off the aim, and both of those
+// poses have to stay in shot. Dropping it out of the frame hides the one
+// animation the player watches eight times a flight.
+weapon.tryReload();
+weapon.update(CONFIG.weapon.reload * 0.5, {});
+expect(handInFrame() < 0.98, `mid-reload the hand is ${handInFrame().toFixed(2)} down the frame`);
+while (weapon.reloading) weapon.update(1 / 60, {});
+for (let i = 0; i < 90; i++) weapon.update(1 / 60, { moving: true, sprinting: true });
+expect(handInFrame() < 0.98, `at a sprint the hand is ${handInFrame().toFixed(2)} down the frame`);
+weapon.update(1, {});
+weapon.group.updateMatrixWorld(true);
+
+// Both limb tips in shot, well apart, and unobstructed. The last of those is
+// the one that matters and the one that is invisible in code: held canted in
+// across the body, the near limb sat behind the stock from the eye's point of
+// view, so all that showed of the prod was one thin tapering limb on the far
+// side and the weapon read as a rifle.
+const ray = new THREE.Raycaster();
+const tips = weapon.stringSides.map((s) => new THREE.Vector3().setFromMatrixPosition(s.pivot.matrixWorld));
+const seenTips = tips.map((tip) => tip.clone().project(camera));
+for (const [i, seen] of seenTips.entries()) {
+  const which = i === 0 ? "left" : "right";
+  expect(Math.abs(seen.x) < 0.94, `the ${which} limb tip is off the side of the frame`);
+  const fraction = (1 - seen.y) / 2;
+  expect(fraction > 0.5 && fraction < 0.94, `the ${which} limb tip is ${fraction.toFixed(2)} down the frame`);
+
+  ray.set(new THREE.Vector3(), tips[i].clone().normalize());
+  const hits = ray.intersectObject(weapon.group, true);
+  const buried = hits.length ? tips[i].length() - hits[0].distance : 0;
+  expect(buried < 0.04, `the ${which} limb tip is ${mm(buried)} behind the rest of the weapon`);
+}
+expect(
+  Math.abs(seenTips[1].x - seenTips[0].x) > 0.5,
+  `the prod spans only ${(Math.abs(seenTips[1].x - seenTips[0].x) / 2).toFixed(2)} of the frame`
+);
 
 // ------------------------------------------------------------ firing and reload
 
@@ -337,9 +370,18 @@ expect(Math.abs(weapon._sway.x) <= swayMax + 1e-6, `sway of ${weapon._sway.x} ex
 for (let i = 0; i < 200; i++) weapon.update(1 / 60, { turnRate: { x: 0, y: 0 } });
 expect(Math.abs(weapon._sway.x) < 1e-3, "the weapon never settles back onto the aim");
 
-const level = weapon.group.position.y;
-for (let i = 0; i < 60; i++) weapon.update(1 / 60, { moving: true, sprinting: true, turnRate: null });
-expect(weapon.group.position.y < level - 0.03, "the weapon is not dropped out of the aim at a sprint");
+/** Mean height over a second, since the bob alone is worth a few centimetres. */
+function meanHeight(state) {
+  let total = 0;
+  for (let i = 0; i < 60; i++) {
+    weapon.update(1 / 60, state);
+    total += weapon.group.position.y;
+  }
+  return total / 60;
+}
+const level = meanHeight({ turnRate: { x: 0, y: 0 } });
+const loping = meanHeight({ moving: true, sprinting: true, turnRate: null });
+expect(loping < level - 0.03, "the weapon is not dropped out of the aim at a sprint");
 
 weapon.dispose();
 

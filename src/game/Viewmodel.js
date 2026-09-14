@@ -37,9 +37,15 @@ export class Viewmodel {
     this.key.position.set(-0.6, 0.8, 0.4);
     // The rim stays put in camera space. A key light that follows the sun can
     // end up square behind the weapon, and something has to keep an edge on it.
-    this.rim = new THREE.DirectionalLight(0x6d86b5, 1.6);
+    // Well over the world's own rim at 0.42, because the weapon is iron and
+    // blued steel and a metal with nothing to reflect renders black. There is
+    // nothing in a volcanic dusk's environment map bright enough to put an
+    // edge on it, so this light does that job alone. Not higher than this,
+    // though: at 3.2 it flooded every up-facing surface on the receiver into
+    // one white rectangle.
+    this.rim = new THREE.DirectionalLight(0x7d93bd, 1.1);
     this.rim.position.set(0.85, 0.32, -0.6);
-    this.bounce = new THREE.HemisphereLight(0x8a6a55, 0x2a1710, 1.2);
+    this.bounce = new THREE.HemisphereLight(0x8a6a55, 0x2a1710, 1.1);
     this.muzzle = new THREE.PointLight(0xffb066, 0, 3.4, 2);
     this.muzzle.position.set(0, 0.0, -0.8);
     for (const light of [this.key, this.rim, this.bounce, this.muzzle]) this.camera.add(light);
@@ -71,11 +77,16 @@ export class Viewmodel {
       this.key.position.copy(this._sun).normalize().applyQuaternion(this._q);
     }
     this.key.color.copy(sun.color);
-    // Lifted over the world's own key: the weapon is in the hunter's shadow for
-    // most of a turn, and a viewmodel that reads as a silhouette is no use.
-    this.key.intensity = sun.intensity * 1.35;
+    // Both lifted over the world's own, because the weapon is in the hunter's
+    // shadow for most of a turn and a viewmodel that reads as a silhouette is
+    // no use. Taken as multiples of the world's rather than set outright: a
+    // fixed 1.8 against the world's hemisphere of 0.7 put two and a half times
+    // the sky onto every up-facing surface of the receiver, which is what blew
+    // the top of the stock out to white in every screenshot.
+    this.key.intensity = sun.intensity * 1.15;
     this.bounce.color.copy(hemi.color);
     this.bounce.groundColor.copy(hemi.groundColor);
+    this.bounce.intensity = hemi.intensity * 1.6;
   }
 
   /**
