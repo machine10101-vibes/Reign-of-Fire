@@ -32,7 +32,7 @@ export const WEAPONS = {
     epithet: "Dragon-shot lock",
     kind: "scatter",
     ammo: "Shot",
-    cost: 280,
+    cost: 200,
     blurb: "A flared lock that throws a fist of iron into whatever is close enough to smell. Useless past forty metres; ruinous inside twenty.",
     pose: { pos: [0.16, -0.15, -0.7], rot: [-0.16, -0.03, 0.05] },
     upgrades: [
