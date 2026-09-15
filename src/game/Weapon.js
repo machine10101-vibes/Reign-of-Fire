@@ -980,10 +980,11 @@ export class Weapon {
     const around = (phi, z, r = arcR) => [Math.sin(phi) * r * side, Math.cos(phi) * r, z];
     const KNUCKLE_Z = 0.03;
 
-    // Back of the hand stands off the handle. Fingers glued to the cylinder
-    // at constant radius were indistinguishable from the grip they held.
-    const back = new THREE.Mesh(roundedBlock(0.052, 0.078, 0.032, 0.014), m.glove);
-    back.position.set(palmX, 0.002, KNUCKLE_Z - 0.03);
+    // Back of the hand stands off the handle. A rounded block read as a
+    // crate; a scaled sphere is the same mass without the corners.
+    const back = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 10), m.glove);
+    back.scale.set(1.1, 0.78, 1.5);
+    back.position.set(palmX, 0.004, KNUCKLE_Z - 0.03);
     g.add(back);
     g.add(
       new THREE.Mesh(
