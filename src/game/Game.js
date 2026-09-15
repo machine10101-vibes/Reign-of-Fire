@@ -14,6 +14,7 @@ import { HUD } from "./HUD.js";
 import { GameAudio } from "./Audio.js";
 import { PerformanceMonitor } from "./Performance.js";
 import { DemoDirector } from "./DemoDirector.js";
+import { Shop } from "./Shop.js";
 
 export class Game {
   constructor(canvas) {
@@ -60,12 +61,15 @@ export class Game {
     this.player.bind(this.canvas);
     this.viewmodel = new Viewmodel(this.camera, innerWidth / innerHeight, this.world.envMap);
     this.weapon = new Weapon(this.viewmodel, textures);
+    this.shop = new Shop();
 
     this.particles = new Particles(this.scene);
     this.hunt = new Hunt(this.scene, this.world, textures, this.audio);
     this.combat = new Combat(this.scene, this.world, this.hunt, this.particles, this.audio);
     this.fx = new PostFX(this.renderer, this.scene, this.camera, this.viewmodel);
     this.demo = new DemoDirector(this.player, this.weapon);
+    this.shop.attachHunt(this.hunt);
+    this.shop.bind((id, tier) => this.weapon.rebuild(id, tier));
 
     this._applyQuality(this.perf.tier);
     this.perf.onChange((tier) => this._applyQuality(tier));
@@ -121,6 +125,18 @@ export class Game {
     if (this.downedFor > 0) this._goingDown(dt);
     else if (this.player.health <= 0) this._goDown();
 
+    const atCamp = this.world.atCamp(this.player.position);
+    const wasOpen = this.shop.open;
+    if (this.player.consumeShop()) this.shop.toggle(atCamp);
+    if (this.player.consumeShopClose()) this.shop.close();
+    if (this.shop.open && !atCamp) this.shop.close();
+    if (wasOpen && !this.shop.open) this.canvas.requestPointerLock?.().catch(() => {});
+    this.player.busy = this.shop.open;
+    if (this.shop.open) {
+      this.player.fireHeld = false;
+      this.player.keys.clear();
+    }
+
     const moving = this.player.update(dt);
     if (this.player.didStep) this.audio.step(this.player.sprint);
 
@@ -160,11 +176,11 @@ export class Game {
       turnRate: this.player.turnRate,
       aimingHot: hot,
     });
-    if (this.player.consumeReload()) this.weapon.tryReload();
-    if (this.player.fireHeld && this.weapon.tryFire()) {
+    if (!this.shop.open && this.player.consumeReload()) this.weapon.tryReload();
+    if (!this.shop.open && this.player.fireHeld && this.weapon.tryFire()) {
       this.camera.getWorldDirection(this._dir);
       this.weapon.muzzleWorld(this._muzzle);
-      this.combat.fire(this._muzzle, this._dir);
+      this.combat.fire(this._muzzle, this._dir, this.weapon.shot);
       this.player.addShake(0.045);
       this.audio.fire();
       this.particles.muzzleFlash(this._muzzle, this._dir);
@@ -199,15 +215,21 @@ export class Game {
       logDirty: this.hunt.logDirty,
       fps: this.perf.fps,
       quality: this.perf.tier,
-      hint: resting && this.player.health < 100
-        ? "Binding wounds at the camp fire."
-        : focus?.ai.hint ?? "The ridge has gone quiet.",
+      hint: this.shop.open
+        ? "The camp armoury. Gold from the ridge buys iron."
+        : resting
+          ? this.player.health < 100
+            ? "Binding wounds at the camp fire. B — armoury."
+            : "Camp fire. B opens the armoury."
+          : focus?.ai.hint ?? "The ridge has gone quiet.",
+      weaponName: this.weapon.spec.name,
+      ammoLabel: this.weapon.spec.ammo,
       hot,
       hit: this.combat.lastHit > 0,
       hitPart: this.combat.lastHitPart,
       // Normalised against a clean unarmoured hit, so a glance off a Basalt
       // Tyrant's plate reads differently from one through a wing.
-      hitWeight: THREE.MathUtils.clamp((this.combat.lastHitDealt ?? 0) / CONFIG.weapon.damage, 0, 1),
+      hitWeight: THREE.MathUtils.clamp((this.combat.lastHitDealt ?? 0) / Math.max(1, this.weapon.damage), 0, 1),
       heat: this.player.onFire > 0,
       reloading: this.weapon.reloading,
       reloadProgress: this.weapon.reloadProgress,

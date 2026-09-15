@@ -843,6 +843,23 @@ export class World {
     this.campFire.castShadow = false;
     fire.add(this.campFire);
     camp.add(fire);
+
+    // A rack by the fire so the armoury has a place in the world, not just
+    // a key binding. Three upright silhouettes — the ones you have not
+    // bought yet still hang here as a promise.
+    const rack = new THREE.Group();
+    rack.position.set(3.4, 0, 0.4);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.8, 1.6), wood);
+    rail.position.set(0, 1.0, 0);
+    rack.add(rail);
+    for (let i = 0; i < 3; i++) {
+      const piece = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.15, 0.14), hide);
+      piece.position.set(0.16, 1.05, -0.45 + i * 0.45);
+      piece.rotation.z = -0.18;
+      rack.add(piece);
+    }
+    camp.add(rack);
+
     this.campGroup = camp;
     this.campCenter = new THREE.Vector3(SPAWN.x + 1.6, ground, SPAWN.y + 1.4);
     this.campRadius = 8.5;

@@ -49,8 +49,8 @@ export class Viewmodel {
     // A short fill on the gloves. Without it the hands sit in the hunter's
     // own shadow and every joint collapses into one dark mass, however
     // carefully they were modelled.
-    this.handFill = new THREE.PointLight(0xc4a078, 0.5, 0.65, 2);
-    this.handFill.position.set(0.1, -0.12, -0.42);
+    this.handFill = new THREE.PointLight(0xd4b090, 0.95, 0.9, 2);
+    this.handFill.position.set(0.14, -0.08, -0.38);
     this.muzzle = new THREE.PointLight(0xffb066, 0, 3.4, 2);
     this.muzzle.position.set(0, 0.0, -0.8);
     for (const light of [this.key, this.rim, this.bounce, this.handFill, this.muzzle]) {

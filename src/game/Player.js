@@ -38,6 +38,8 @@ export class Player {
     window.addEventListener("keydown", (e) => {
       this.keys.add(e.code);
       if (e.code === "KeyR") this._reload = true;
+      if (e.code === "KeyB") this._shop = true;
+      if (e.code === "Escape") this._shopClose = true;
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     dom.addEventListener("mousedown", (e) => {
@@ -68,6 +70,18 @@ export class Player {
   consumeReload() {
     const v = this._reload;
     this._reload = false;
+    return v;
+  }
+
+  consumeShop() {
+    const v = this._shop;
+    this._shop = false;
+    return v;
+  }
+
+  consumeShopClose() {
+    const v = this._shopClose;
+    this._shopClose = false;
     return v;
   }
 

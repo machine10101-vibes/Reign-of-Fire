@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { CONFIG } from "./config.js";
 import { standardFrom, setRepeat } from "./assets.js";
+import { weaponById, tierStats } from "./armory.js";
 
 const FORWARD = new THREE.Vector3(0, 0, -1);
 const _dir = new THREE.Vector3();
@@ -169,58 +170,96 @@ const GRIP_RAKE = 0.34;
 const ARM_IN_SHOT = 0.34;
 
 export class Weapon {
-  constructor(viewmodel, textures) {
+  constructor(viewmodel, textures, specId = "ashpiercer", tier = 0) {
     this.viewmodel = viewmodel;
+    this.textures = textures;
+    this.spec = weaponById(specId);
+    this.tier = tier;
     this.group = new THREE.Group();
-    this.bolts = CONFIG.weapon.bolts;
-    this.max = CONFIG.weapon.bolts;
     this.cooldown = 0;
     this.reloadT = 0;
     this.recoil = 0;
     this.kick = 0;
     this.dry = 0;
-    // 1 while the string is back on the latch, which is also the only state the
-    // weapon can be fired from.
+    // 1 while the string is back on the latch, which is also the only state a
+    // bow can be fired from. Scatter and lance treat it as "seated".
     this.draw = 1;
     this.crankSpin = 0;
     this._sway = new THREE.Vector2();
     this._swayTarget = new THREE.Vector2();
     this._clock = 0;
-    // Held at the right hip, canted in toward the centre of the frame and
-    // pitched nose-down. Chosen by `scripts/framing.mjs` rather than by eye:
-    // the weapon is a metre long, and where a prod that wide falls relative to
-    // the reticle, and whether the hands clear the bottom edge, are arithmetic
-    // once the lens is fixed. Guessing at it cost a dozen screenshots and still
-    // left both hands below the frame.
-    this._restPos = new THREE.Vector3(0.14, -0.16, -0.78);
-    // Held square rather than canted in across the body, and that is not a
-    // stylistic choice. Swinging the muzzle inward rotates the near limb behind
-    // the stock from the eye's point of view, so all that shows of a prod
-    // two thirds of a metre across is one thin tapering limb on the far side —
-    // which is why every screenshot so far looked like a man holding a rifle.
-    // Pitched a little more nose-down so the hunter looks onto the top of the
-    // prod instead of into the butt plate, which is a white door filling the
-    // lower right of the frame.
-    this._restRot = new THREE.Euler(-0.2, -0.02, 0.06);
+    this._applyStats();
     this._pos = new THREE.Vector3();
     this._muzzle = new THREE.Vector3();
 
     this._materials(textures);
     this._build();
+    this._mount();
+    viewmodel.root.add(this.group);
+  }
+
+  _applyStats() {
+    const s = tierStats(this.spec, this.tier);
+    this.bolts = s.bolts;
+    this.max = s.bolts;
+    this.damage = s.damage;
+    this.muzzle = s.muzzle;
+    this.gravity = s.gravity;
+    this.reloadTime = s.reload;
+    this.recoilKick = s.recoil;
+    this.cooldownTime = s.cooldown;
+    this.mass = s.mass;
+    this.pellets = s.pellets;
+    this.spread = s.spread;
+    const pose = this.spec.pose;
+    this._restPos = new THREE.Vector3(...pose.pos);
+    this._restRot = new THREE.Euler(...pose.rot);
+  }
+
+  get shot() {
+    return {
+      kind: this.spec.kind,
+      damage: this.damage,
+      muzzle: this.muzzle,
+      gravity: this.gravity,
+      pellets: this.pellets,
+      spread: this.spread,
+    };
+  }
+
+  /**
+   * Tear the current mesh down and build another. The armoury calls this
+   * when the hunter buys, equips or upgrades — the viewmodel root stays put.
+   */
+  rebuild(specId, tier = 0) {
+    this.viewmodel.root.remove(this.group);
+    this.dispose();
+    this.spec = weaponById(specId);
+    this.tier = tier;
+    this.cooldown = 0;
+    this.reloadT = 0;
+    this.recoil = 0;
+    this.kick = 0;
+    this.dry = 0;
+    this.draw = 1;
+    this.crankSpin = 0;
+    this.group = new THREE.Group();
+    this._applyStats();
+    this._materials(this.textures);
+    this._build();
+    this._mount();
+    this.viewmodel.root.add(this.group);
+  }
+
+  _mount() {
     this.group.position.copy(this._restPos);
     this.group.rotation.copy(this._restRot);
-    // The scale belongs on the weapon, not on the rig above it: putting it on
-    // the parent shrinks this offset along with the model, so every attempt to
-    // push the butt away from the eye was cancelled by the shrink.
     this.group.scale.setScalar(CONFIG.viewmodel.scale);
-    // After the build, not before it. Running this on an empty group is what
-    // left all twenty-odd parts of the weapon frustum culled.
     this.group.traverse((o) => {
       o.frustumCulled = false;
       o.castShadow = false;
       o.receiveShadow = false;
     });
-    viewmodel.root.add(this.group);
   }
 
   get reloading() {
@@ -229,7 +268,7 @@ export class Weapon {
 
   /** 0 to 1 across a reload, for the HUD to draw. */
   get reloadProgress() {
-    return this.reloadT > 0 ? 1 - this.reloadT / CONFIG.weapon.reload : 1;
+    return this.reloadT > 0 ? 1 - this.reloadT / this.reloadTime : 1;
   }
 
   get empty() {
@@ -277,10 +316,26 @@ export class Weapon {
       glove: standardFrom(pack("leather_glove", 1.6, 1.6), {
         // Lifted so a finger is a finger in the hunter's own shadow. At
         // 0x372c24 the gloves were the same value as the stock and vanished.
-        color: 0x6e5a48,
+        color: 0x8a7060,
         metalness: 0,
-        roughness: 0.78,
-        envMapIntensity: 0.3,
+        roughness: 0.74,
+        envMapIntensity: 0.36,
+      }),
+      // Darker leather for palm pads and fingertip caps, so a digit has a
+      // face rather than reading as one continuous worm of the same value.
+      gloveDark: standardFrom(pack("leather_glove", 2.2, 2.2), {
+        color: 0x4e3c30,
+        metalness: 0,
+        roughness: 0.84,
+        envMapIntensity: 0.24,
+      }),
+      // Elbow cloth. A whole forearm in glove leather is a tube with a
+      // different name; a sleeve that stops at a cuff is an arm in a coat.
+      cloth: standardFrom(pack("leather_glove", 2.8, 1.2), {
+        color: 0x3d342c,
+        metalness: 0,
+        roughness: 0.9,
+        envMapIntensity: 0.2,
       }),
       brass: new THREE.MeshStandardMaterial({
         color: 0x9a7434,
@@ -331,6 +386,15 @@ export class Weapon {
       null,
       pivot
     );
+    // One dark leather band. Light cord rings read as a spring under the
+    // viewmodel key and stole the eye from the hand.
+    this._add(
+      new THREE.TorusGeometry(radius * 1.14, 0.004, 5, 10),
+      m.leather,
+      [0, -length * 0.08, 0],
+      [Math.PI / 2, 0, 0],
+      pivot
+    );
     return pivot;
   }
 
@@ -343,6 +407,14 @@ export class Weapon {
   }
 
   _build() {
+    const kind = this.spec.kind;
+    if (kind === "scatter") this._buildEmberhail();
+    else if (kind === "repeater") this._buildWidowcoil();
+    else if (kind === "lance") this._buildHellharpoon();
+    else this._buildAshpiercer();
+  }
+
+  _buildAshpiercer() {
     this._buildStock();
     this._buildBarrel();
     this._buildLimbs();
@@ -605,6 +677,7 @@ export class Weapon {
     // Lock housing and the claw the string latches into.
     this._add(roundedBlock(0.07, 0.03, 0.05, 0.008), m.iron, [0, CHANNEL_Y - 0.016, STRING_LATCH_Z]);
     this._add(roundedBlock(0.02, 0.022, 0.038, 0.005), m.steel, [0, CHANNEL_Y + 0.004, STRING_LATCH_Z - 0.008]);
+    this._add(new THREE.CylinderGeometry(0.008, 0.008, 0.012, 8), m.brass, [0.018, CHANNEL_Y - 0.01, STRING_LATCH_Z], [0, 0, Math.PI / 2]);
   }
 
   _buildSights() {
@@ -762,22 +835,25 @@ export class Weapon {
     const dip = bend(0.72, 0.008);
     const mesh = new THREE.Mesh(
       sweep([root.toArray(), pip.toArray(), dip.toArray(), pad.toArray()], {
-        steps: 12,
-        radial: 7,
-        radius: (t) => 0.0084 * (1 - t * 0.2),
+        steps: 14,
+        radial: 8,
+        radius: (t) => this._digitRadius(0.0086, t),
       }),
       this.mats.glove
     );
     hand.add(mesh);
     for (const [p, r] of [
-      [pip, 0.0082],
-      [dip, 0.0074],
-      [pad, 0.0066],
+      [pip, 0.0074],
+      [dip, 0.0066],
     ]) {
-      const joint = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), this.mats.glove);
+      const joint = new THREE.Mesh(new THREE.SphereGeometry(r, 7, 5), this.mats.glove);
       joint.position.copy(p);
       hand.add(joint);
     }
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 8, 6), this.mats.gloveDark);
+    tip.position.copy(pad);
+    tip.scale.set(0.85, 1.2, 0.9);
+    hand.add(tip);
     hand.userData.digits = 5;
     hand.userData.joints = (hand.userData.joints ?? 0) + 2;
     return mesh;
@@ -804,33 +880,75 @@ export class Weapon {
     // A forearm is near enough straight; the slight outward bow is the belly
     // of the muscle rather than a bend.
     const at = (t, bow) =>
-      elbow.clone().lerp(wrist, t).add(new THREE.Vector3(side * bow, -bow * 0.5, 0));
-    const path = [elbow, at(0.4, 0.014), at(0.75, 0.009), wrist].map((p) => p.toArray());
+      elbow.clone().lerp(wrist, t).add(new THREE.Vector3(side * bow, -bow * 0.45, 0));
+    const path = [elbow, at(0.35, 0.018), at(0.7, 0.012), wrist].map((p) => p.toArray());
 
-    const armR = (t) => 0.045 - t * 0.02;
-    group.add(new THREE.Mesh(sweep(path, { steps: 16, radial: 10, radius: armR }), m.glove));
+    // Oval muscle: thicker in the middle, tapering to the wrist. flatten
+    // squashes the sweep so it reads as a forearm, not a scaffolding pole.
+    const armR = (t) => 0.034 + Math.sin(t * Math.PI * 0.92) * 0.016 - t * 0.006;
+    group.add(
+      new THREE.Mesh(sweep(path, { steps: 18, radial: 12, radius: armR, flatten: 0.68 }), m.glove)
+    );
 
-    // A leather bracer over the wrist half, and two straps standing off it.
-    // Everything here is sized off armR: the first version's straps were
-    // narrower than the arm they were meant to be buckled around, so all that
-    // showed of them was a ring cut into the surface, and the bracer itself ran
-    // the whole length and left the arm one featureless tube.
     const curve = new THREE.CatmullRomCurve3(path.map((p) => new THREE.Vector3(...p)));
+    const axis = new THREE.Vector3(0, 0, 1);
+    const up = new THREE.Vector3(0, 1, 0);
+
+    // Cloth sleeve on the elbow third, stopping at a rolled cuff.
     group.add(
       new THREE.Mesh(
         sweep(
-          [0.52, 0.7, 0.86, 0.99].map((t) => curve.getPointAt(t).toArray()),
-          { steps: 10, radial: 10, radius: (t) => armR(0.52 + t * 0.47) * 1.08 }
+          [0.0, 0.12, 0.24, 0.34].map((t) => curve.getPointAt(t).toArray()),
+          { steps: 10, radial: 12, radius: (t) => armR(t * 0.34) * 1.14, flatten: 0.7 }
+        ),
+        m.cloth
+      )
+    );
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(armR(0.34) * 1.2, 0.007, 6, 14), m.cloth);
+    cuff.position.copy(curve.getPointAt(0.34));
+    cuff.quaternion.setFromUnitVectors(axis, curve.getTangentAt(0.34));
+    group.add(cuff);
+
+    // Leather bracer on the wrist half.
+    group.add(
+      new THREE.Mesh(
+        sweep(
+          [0.48, 0.66, 0.84, 0.99].map((t) => curve.getPointAt(t).toArray()),
+          { steps: 12, radial: 12, radius: (t) => armR(0.48 + t * 0.51) * 1.1, flatten: 0.66 }
         ),
         m.leather
       )
     );
-    const axis = new THREE.Vector3(0, 0, 1);
-    for (const t of [0.62, 0.84]) {
-      const strap = new THREE.Mesh(new THREE.TorusGeometry(armR(t) * 1.16, 0.0055, 6, 14), m.leather);
+
+    // Iron strips along the top of the bracer — gauntlet plates, not rings
+    // cut into a tube.
+    for (const t of [0.58, 0.74, 0.9]) {
+      const p = curve.getPointAt(t);
+      const tan = curve.getTangentAt(t);
+      const binormal = new THREE.Vector3().crossVectors(tan, up);
+      if (binormal.lengthSq() < 1e-6) binormal.set(side, 0, 0);
+      binormal.normalize();
+      const out = new THREE.Vector3().crossVectors(binormal, tan).normalize();
+      const plate = new THREE.Mesh(roundedBlock(0.03, 0.005, 0.022, 0.003), m.iron);
+      plate.position.copy(p).addScaledVector(out, armR(t) * 0.82);
+      plate.quaternion.setFromUnitVectors(axis, tan);
+      group.add(plate);
+    }
+
+    for (const t of [0.56, 0.82]) {
+      const strap = new THREE.Mesh(new THREE.TorusGeometry(armR(t) * 1.2, 0.0042, 6, 14), m.leather);
       strap.position.copy(curve.getPointAt(t));
       strap.quaternion.setFromUnitVectors(axis, curve.getTangentAt(t));
       group.add(strap);
+      const buckle = new THREE.Mesh(roundedBlock(0.012, 0.007, 0.006, 0.002), m.brass);
+      const p = curve.getPointAt(t);
+      const tan = curve.getTangentAt(t);
+      const binormal = new THREE.Vector3().crossVectors(tan, up);
+      if (binormal.lengthSq() < 1e-6) binormal.set(side, 0, 0);
+      binormal.normalize();
+      buckle.position.copy(p).addScaledVector(binormal, armR(t) * 1.05 * side);
+      buckle.quaternion.setFromUnitVectors(axis, tan);
+      group.add(buckle);
     }
 
     group.add(hand);
@@ -846,44 +964,62 @@ export class Weapon {
    * muzzle face toward that side, so a finger root sits next to the palm and
    * the tip wraps onto the far face.
    *
-   * The palm is a tapered mass with thenar and hypothenar pads. Four fingers
-   * are three-bone chains with PIP / DIP joints. The thumb comes off the
-   * thenar and opposes them. Index is skipped on the rear hand —
-   * `_triggerFinger` draws that one reaching for the trigger.
+   * The palm is a swept mass with thenar and hypothenar pads. Four fingers
+   * are one continuous leather sweep each, thicker at the PIP and DIP rather
+   * than a chain of beads. The thumb comes off the thenar and opposes them.
+   * Index is skipped on the rear hand — `_triggerFinger` draws that one
+   * reaching for the trigger.
    */
   _hand(gripR, side, skipIndex = false) {
     const m = this.mats;
     const g = new THREE.Group();
-    const rF = 0.0088;
+    const rF = 0.0105;
     const arcR = gripR + rF + 0.004;
-    const palmX = side * (gripR + 0.02);
+    const palmX = side * (gripR + 0.028);
     const ROOT = 1.92;
     const around = (phi, z, r = arcR) => [Math.sin(phi) * r * side, Math.cos(phi) * r, z];
     const KNUCKLE_Z = 0.03;
 
-    // Palm sits *outside* the handle. The first rebuild buried it inside the
-    // grip (x < gripR), so all that showed of a hand was a row of joint
-    // spheres stuck to a leather cylinder.
-    const heel = new THREE.Mesh(roundedBlock(0.038, 0.032, 0.026, 0.012), m.glove);
-    heel.position.set(palmX, -0.004, KNUCKLE_Z - 0.078);
-    g.add(heel);
-    const mid = new THREE.Mesh(roundedBlock(0.048, 0.038, 0.028, 0.012), m.glove);
-    mid.position.set(palmX, 0.0, KNUCKLE_Z - 0.04);
-    g.add(mid);
-    const pad = new THREE.Mesh(roundedBlock(0.03, 0.044, 0.026, 0.011), m.glove);
-    pad.position.set(palmX, 0.004, KNUCKLE_Z - 0.004);
-    g.add(pad);
+    // Back of the hand stands off the handle. A rounded block read as a
+    // crate; a scaled sphere is the same mass without the corners.
+    const back = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 10), m.glove);
+    back.scale.set(1.1, 0.78, 1.5);
+    back.position.set(palmX, 0.004, KNUCKLE_Z - 0.03);
+    g.add(back);
+    g.add(
+      new THREE.Mesh(
+        sweep(
+          [
+            [palmX * 0.88, -0.008, KNUCKLE_Z - 0.092],
+            [palmX, -0.002, KNUCKLE_Z - 0.055],
+            [palmX * 1.06, 0.006, KNUCKLE_Z - 0.016],
+            [palmX * 0.98, 0.012, KNUCKLE_Z + 0.01],
+          ],
+          {
+            steps: 12,
+            radial: 10,
+            radius: (t) => 0.017 + t * 0.01,
+            flatten: 0.55,
+          }
+        ),
+        m.glove
+      )
+    );
 
-    const thenar = new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 8), m.glove);
-    thenar.position.set(palmX * 0.85, 0.02, KNUCKLE_Z - 0.012);
-    thenar.scale.set(1.15, 1.35, 1.15);
+    const thenar = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), m.glove);
+    thenar.position.set(palmX * 0.78, 0.03, KNUCKLE_Z - 0.002);
+    thenar.scale.set(1.35, 1.7, 1.3);
     g.add(thenar);
-    const hypo = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), m.glove);
-    hypo.position.set(palmX * 0.8, -0.016, KNUCKLE_Z - 0.07);
-    hypo.scale.set(1.1, 0.85, 1.2);
+    const hypo = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), m.glove);
+    hypo.position.set(palmX * 0.75, -0.022, KNUCKLE_Z - 0.074);
+    hypo.scale.set(1.3, 1.0, 1.45);
     g.add(hypo);
+    const contact = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), m.gloveDark);
+    contact.position.set(palmX * 0.42, 0.004, KNUCKLE_Z - 0.034);
+    contact.scale.set(0.7, 1.5, 1.75);
+    g.add(contact);
 
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.022, 0.034, 8), m.glove);
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.023, 0.036, 8), m.glove);
     cuff.rotation.x = Math.PI / 2;
     cuff.position.set(palmX * 0.85, -0.008, KNUCKLE_Z - 0.082);
     g.add(cuff);
@@ -896,16 +1032,33 @@ export class Weapon {
     g.userData.wrist = wrist;
 
     const rows = [
-      { z: KNUCKLE_Z, curl: 2.15, r: 0.0084, phi: 0 },
-      { z: KNUCKLE_Z - 0.021, curl: 2.32, r: 0.0088, phi: 0.04 },
-      { z: KNUCKLE_Z - 0.042, curl: 2.42, r: 0.0082, phi: 0.08 },
-      { z: KNUCKLE_Z - 0.061, curl: 2.5, r: 0.0074, phi: 0.12 },
+      { z: KNUCKLE_Z, curl: 2.05, r: 0.0104, phi: 0 },
+      { z: KNUCKLE_Z - 0.022, curl: 2.2, r: 0.0108, phi: 0.03 },
+      { z: KNUCKLE_Z - 0.044, curl: 2.32, r: 0.01, phi: 0.07 },
+      { z: KNUCKLE_Z - 0.064, curl: 2.42, r: 0.009, phi: 0.11 },
     ];
+    const knuckleR = arcR + 0.018;
+
+    // Connected knuckle bar across the back of the hand, stood off so it
+    // reads as a row of joints rather than paint on the handle.
+    g.add(
+      new THREE.Mesh(
+        sweep(
+          rows.map((row) => around(ROOT + row.phi - 0.05, row.z, knuckleR)),
+          { steps: 10, radial: 7, radius: () => 0.009, flatten: 0.7 }
+        ),
+        m.glove
+      )
+    );
+
     let joints = 0;
     rows.forEach((row, i) => {
-      const mcp = new THREE.Mesh(new THREE.SphereGeometry(row.r * 1.08, 8, 6), m.glove);
-      mcp.position.set(...around(ROOT + row.phi - 0.08, row.z));
+      const mcp = new THREE.Mesh(new THREE.SphereGeometry(row.r * 1.05, 8, 6), m.glove);
+      mcp.position.set(...around(ROOT + row.phi - 0.06, row.z, knuckleR));
       g.add(mcp);
+      const plate = new THREE.Mesh(roundedBlock(0.016, 0.005, 0.012, 0.002), m.iron);
+      plate.position.set(...around(ROOT + row.phi - 0.06, row.z, knuckleR + 0.007));
+      g.add(plate);
       joints += 1;
       if (i === 0 && skipIndex) return;
       joints += this._digit(g, {
@@ -917,29 +1070,46 @@ export class Weapon {
         side,
         arcR,
       });
+      if (i < rows.length - 1) {
+        const a = around(ROOT + row.phi - 0.02, row.z, knuckleR);
+        const b = around(ROOT + rows[i + 1].phi - 0.02, rows[i + 1].z, knuckleR);
+        const mid = [(a[0] + b[0]) / 2, ((a[1] + b[1]) / 2) * 0.88, (a[2] + b[2]) / 2];
+        g.add(
+          new THREE.Mesh(
+            sweep([a, mid, b], { steps: 6, radial: 6, radius: () => 0.005, flatten: 0.4 }),
+            m.glove
+          )
+        );
+      }
     });
 
-    // Thumb: two bones off the thenar, laid down the front of the handle
-    // so it opposes the fingers from the camera's side of the grip.
-    const t0 = [palmX * 0.7, 0.016, KNUCKLE_Z + 0.01];
-    const t1 = [side * gripR * 0.15, arcR * 1.02, KNUCKLE_Z + 0.002];
-    const t2 = [-side * gripR * 0.55, arcR * 0.7, KNUCKLE_Z - 0.016];
-    g.add(
-      new THREE.Mesh(sweep([t0, t1], { steps: 8, radial: 7, radius: () => 0.009 }), m.glove)
-    );
+    // Thumb: three bones off the thenar, stood out on the muzzle face so
+    // it opposes the fingers instead of hiding inside the handle.
+    const t0 = [palmX * 0.7, 0.032, KNUCKLE_Z + 0.016];
+    const t1 = [palmX * 0.18, arcR * 1.22, KNUCKLE_Z + 0.022];
+    const t2 = [-side * gripR * 0.2, arcR * 1.12, KNUCKLE_Z + 0.006];
+    const t3 = [-side * gripR * 0.75, arcR * 0.7, KNUCKLE_Z - 0.014];
     g.add(
       new THREE.Mesh(
-        sweep([t1, t2], { steps: 8, radial: 7, radius: (t) => 0.0078 * (1 - t * 0.16) }),
+        sweep([t0, t1, t2, t3], {
+          steps: 12,
+          radial: 8,
+          radius: (t) => this._digitRadius(0.011, t),
+        }),
         m.glove
       )
     );
-    const tmj = new THREE.Mesh(new THREE.SphereGeometry(0.0096, 8, 6), m.glove);
+    const tmj = new THREE.Mesh(new THREE.SphereGeometry(0.0082, 7, 5), m.glove);
     tmj.position.set(...t1);
     g.add(tmj);
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0072, 8, 6), m.glove);
-    tip.position.set(...t2);
+    const ip = new THREE.Mesh(new THREE.SphereGeometry(0.0074, 7, 5), m.glove);
+    ip.position.set(...t2);
+    g.add(ip);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0066, 8, 6), m.gloveDark);
+    tip.position.set(...t3);
+    tip.scale.set(0.85, 1.2, 0.9);
     g.add(tip);
-    joints += 1;
+    joints += 2;
 
     g.userData.knuckle = around(ROOT, KNUCKLE_Z);
     g.userData.digits = skipIndex ? 4 : 5;
@@ -948,18 +1118,36 @@ export class Weapon {
   }
 
   /**
-   * One finger: short bones + spherical PIP / DIP joints wrapping the grip.
+   * Finger thickness: tapers to the tip, with a gentle swell at the PIP and
+   * DIP. Separate joint spheres used to read as beads on a worm; the swell
+   * is the same anatomy without the necklace.
+   */
+  _digitRadius(base, t) {
+    const taper = base * (1 - t * 0.22);
+    const pip = Math.exp(-((t - 0.33) ** 2) / 0.014);
+    const dip = Math.exp(-((t - 0.66) ** 2) / 0.012);
+    return taper * (1 + 0.14 * pip + 0.1 * dip);
+  }
+
+  /**
+   * One finger wrapping the grip as a single leather sweep.
    */
   _digit(parent, { z, startPhi, curl, radius, bones, side, arcR }) {
-    const around = (phi, zz) => [Math.sin(phi) * arcR * side, Math.cos(phi) * arcR, zz];
+    // Knuckles stand off the handle; the tip closes on it. A constant
+    // radius glued the finger to the cylinder and it read as the wrap.
+    const at = (t) => {
+      const r = arcR + 0.018 * (1 - t) * (1 - t);
+      const phi = startPhi - curl * t;
+      return [Math.sin(phi) * r * side, Math.cos(phi) * r, z - 0.0025 * t * bones];
+    };
     const pts = [];
     let joints = 0;
     for (let i = 0; i <= bones; i++) {
       const t = i / bones;
-      const p = around(startPhi - curl * t, z - 0.002 * i);
+      const p = at(t);
       pts.push(p);
       if (i > 0 && i < bones) {
-        const joint = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.06, 8, 6), this.mats.glove);
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.78, 7, 5), this.mats.glove);
         joint.position.set(...p);
         parent.add(joint);
         joints += 1;
@@ -967,14 +1155,302 @@ export class Weapon {
     }
     parent.add(
       new THREE.Mesh(
-        sweep(pts, { steps: 10, radial: 7, radius: (t) => radius * (1 - t * 0.18) }),
+        sweep(pts, {
+          steps: 14,
+          radial: 8,
+          radius: (t) => this._digitRadius(radius, t),
+        }),
         this.mats.glove
       )
     );
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.92, 8, 6), this.mats.glove);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.78, 8, 6), this.mats.gloveDark);
     tip.position.set(...pts[pts.length - 1]);
+    tip.scale.set(0.8, 1.22, 0.9);
     parent.add(tip);
     return joints;
+  }
+
+  /**
+   * Emberhail: a flared dragon-shot lock. Short, fat, leather-wrapped, with
+   * a muzzle that reads as a funnel rather than a rifle barrel.
+   */
+  _buildEmberhail() {
+    const m = this.mats;
+    // Sloped tiller, not a brick. The first pass was a rectangular stock
+    // with a funnel glued on; a lock this short has a wrist and a comb.
+    this._add(
+      profileSolid(
+        [
+          [-0.22, 0.026],
+          [-0.02, 0.04],
+          [0.08, 0.052],
+          [0.16, 0.024],
+          [0.185, -0.012],
+          [0.16, -0.06],
+          [0.08, -0.052],
+          [0.0, -0.028],
+          [-0.22, -0.026],
+        ],
+        0.046
+      ),
+      m.wood
+    );
+    this._add(
+      lathe([
+        [0.0, 0.16],
+        [0.036, 0.16],
+        [0.038, 0.26],
+        [0.044, 0.32],
+        [0.056, 0.38],
+        [0.072, 0.425],
+        [0.088, 0.452],
+        [0.042, 0.46],
+        [0.0, 0.454],
+      ]),
+      m.iron
+    );
+    this._add(new THREE.CylinderGeometry(0.04, 0.044, 0.16, 12), m.leather, [0, 0.0, -0.28], [Math.PI / 2, 0, 0]);
+    for (const z of [-0.22, -0.3, -0.38]) {
+      this._add(new THREE.TorusGeometry(0.044, 0.0055, 6, 14), m.brass, [0, 0.0, z], [Math.PI / 2, 0, 0]);
+    }
+    // Side lock plate and a hammer that cocks back — the silhouette of a
+    // flintlock, not a featureless iron brick on the receiver.
+    this._add(roundedBlock(0.072, 0.034, 0.016, 0.005), m.iron, [0.03, 0.006, 0.042]);
+    this._add(roundedBlock(0.03, 0.042, 0.01, 0.004), m.steel, [0.036, 0.03, 0.058], [0, 0, 0.45]);
+    this._add(new THREE.SphereGeometry(0.01, 8, 6), m.brass, [0.038, 0.004, 0.018]);
+    // Ramrod under the barrel.
+    this._add(new THREE.CylinderGeometry(0.005, 0.005, 0.28, 6), m.wood, [0, -0.04, -0.2], [Math.PI / 2, 0, 0]);
+    this._add(new THREE.CylinderGeometry(0.007, 0.007, 0.016, 6), m.brass, [0, -0.04, -0.06], [Math.PI / 2, 0, 0]);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      this._add(
+        new THREE.CylinderGeometry(0.004, 0.004, 0.018, 5),
+        m.blued,
+        [Math.cos(a) * 0.058, Math.sin(a) * 0.058, -0.44],
+        [Math.PI / 2, 0, 0]
+      );
+    }
+    this.trigger = this._add(roundedBlock(0.012, 0.034, 0.01, 0.004), m.steel, TRIGGER, [0, 0, 0.2]);
+    this._add(
+      new THREE.TorusGeometry(0.03, 0.005, 6, 14, Math.PI * 1.1),
+      m.blued,
+      [0, TRIGGER[1], TRIGGER[2]],
+      [0, Math.PI / 2, -0.4]
+    );
+    this.rearSight = this._add(new THREE.TorusGeometry(0.012, 0.003, 6, 12), m.blued, [0, 0.068, -0.06]);
+    this._add(roundedBlock(0.012, 0.03, 0.008, 0.003), m.blued, [0, 0.05, -0.06]);
+    this._add(new THREE.SphereGeometry(0.005, 8, 6), m.brass, [0, 0.062, -0.42]);
+    this.bolt = new THREE.Group();
+    this.bolt.position.set(0, 0.012, -0.2);
+    this.group.add(this.bolt);
+    this._add(new THREE.CylinderGeometry(0.016, 0.014, 0.05, 8), m.brass, [0, 0, 0], [Math.PI / 2, 0, 0], this.bolt);
+    this.muzzleLocal = [0, 0.0, -0.46];
+    this.grip = this._grip(GRIP, 0.023, 0.12, GRIP_RAKE);
+    this.foregrip = this._grip(FOREGRIP, 0.02, 0.1, -0.1);
+    this._buildArms();
+  }
+
+  /**
+   * Widow's Coil: a boxed repeating arbalest. A wide prod, a magazine on
+   * top, a side crank — the silhouette of something that feeds itself.
+   */
+  _buildWidowcoil() {
+    const m = this.mats;
+    const tipX = 0.3;
+    const tipY = 0.046;
+    const tipZ = -0.44;
+    const rootZ = -0.48;
+    this.stringY = tipY;
+    this.stringRestZ = tipZ;
+    this.stringLatchZ = -0.12;
+    this._add(
+      profileSolid(
+        [
+          [-0.26, 0.03],
+          [0.0, 0.04],
+          [0.1, 0.062],
+          [0.18, 0.026],
+          [0.2, -0.014],
+          [0.175, -0.058],
+          [0.1, -0.052],
+          [0.02, -0.03],
+          [-0.26, -0.026],
+        ],
+        0.042
+      ),
+      m.wood
+    );
+    this._add(roundedBlock(0.1, 0.062, 0.08, 0.01), m.iron, [0, 0.038, rootZ]);
+    this._add(roundedBlock(0.108, 0.07, 0.028, 0.008), m.leather, [0, 0.038, rootZ]);
+    // Magazine: a box with feed lips and a catch, not four sticks in a crate.
+    this._add(roundedBlock(0.1, 0.078, 0.052, 0.006), m.blued, [0, 0.078, -0.18]);
+    this._add(roundedBlock(0.086, 0.012, 0.048, 0.003), m.iron, [0, 0.122, -0.18]);
+    this._add(roundedBlock(0.016, 0.02, 0.012, 0.003), m.steel, [0.03, 0.1, -0.12]);
+    for (let i = 0; i < 5; i++) {
+      this._add(
+        new THREE.CylinderGeometry(0.0055, 0.006, 0.17, 5),
+        m.wood,
+        [0.016, 0.086 - i * 0.011, -0.18],
+        [Math.PI / 2, 0, 0]
+      );
+    }
+    this.limbs = [];
+    for (const side of [-1, 1]) {
+      const path = [
+        [side * 0.04, tipY + 0.005, rootZ],
+        [side * 0.12, tipY + 0.007, rootZ - 0.024],
+        [side * 0.2, tipY + 0.003, rootZ - 0.04],
+        [side * 0.26, tipY - 0.001, rootZ - 0.022],
+        [side * tipX, tipY, tipZ],
+      ];
+      this.limbs.push(
+        this._add(
+          sweep(path, {
+            steps: 20,
+            radial: 9,
+            radius: (t) => 0.02 * (1 - t * 0.14) + 0.008,
+            flatten: 0.5,
+          }),
+          m.wood
+        )
+      );
+      this._add(
+        new THREE.TorusGeometry(0.012, 0.004, 6, 10),
+        m.blued,
+        [side * (tipX - 0.006), tipY, tipZ + 0.004],
+        [0, side * 0.55, Math.PI / 2]
+      );
+    }
+    const geo = new THREE.CylinderGeometry(0.0024, 0.0024, 1, 5, 1, true);
+    geo.rotateX(Math.PI / 2);
+    geo.translate(0, 0, -0.5);
+    this.stringSides = [];
+    for (const side of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(side * tipX, tipY, tipZ);
+      this.group.add(pivot);
+      const mesh = new THREE.Mesh(geo, m.cord);
+      pivot.add(mesh);
+      this.stringSides.push({ pivot, mesh });
+    }
+    this.serving = this._add(
+      new THREE.CylinderGeometry(0.004, 0.004, 0.04, 6),
+      m.leather,
+      [0, tipY, this.stringLatchZ],
+      [0, 0, Math.PI / 2]
+    );
+    this.trigger = this._add(roundedBlock(0.01, 0.032, 0.008, 0.004), m.steel, TRIGGER, [0, 0, 0.18]);
+    this._add(
+      new THREE.TorusGeometry(0.028, 0.0045, 6, 14, Math.PI * 1.1),
+      m.blued,
+      [0, TRIGGER[1], TRIGGER[2]],
+      [0, Math.PI / 2, -0.4]
+    );
+    this.rearSight = this._add(new THREE.TorusGeometry(0.012, 0.003, 6, 12), m.blued, [0, 0.12, -0.08]);
+    this.crank = new THREE.Group();
+    this.crank.position.set(0.042, -0.004, 0.02);
+    this.group.add(this.crank);
+    this._add(new THREE.CylinderGeometry(0.024, 0.024, 0.01, 12), m.iron, null, [0, 0, Math.PI / 2], this.crank);
+    this._add(roundedBlock(0.042, 0.01, 0.008, 0.003), m.iron, [0, 0.02, 0.004], [0, 0, Math.PI / 2], this.crank);
+    this._add(
+      new THREE.CylinderGeometry(0.007, 0.007, 0.024, 8),
+      m.leather,
+      [0, 0.038, 0.014],
+      [0, 0, Math.PI / 2],
+      this.crank
+    );
+    this.bolt = new THREE.Group();
+    this.bolt.position.set(0, tipY, 0);
+    this.group.add(this.bolt);
+    this._add(new THREE.CylinderGeometry(0.006, 0.007, 0.32, 6), m.wood, [0, 0, -0.28], [Math.PI / 2, 0, 0], this.bolt);
+    this._add(new THREE.ConeGeometry(0.01, 0.04, 5), m.steel, [0, 0, -0.46], [Math.PI / 2, 0, 0], this.bolt);
+    this.muzzleLocal = [0, tipY, -0.52];
+    this.grip = this._grip(GRIP, 0.022, 0.118, GRIP_RAKE);
+    this.foregrip = this._grip(FOREGRIP, 0.019, 0.095, -0.1);
+    this._buildArms();
+  }
+
+  /**
+   * Hellharpoon: a long fire lance. Tube, ember vents, a spear seated on
+   * top. The heaviest thing in the armoury, and it looks it.
+   */
+  _buildHellharpoon() {
+    const m = this.mats;
+    this._add(
+      profileSolid(
+        [
+          [-0.4, 0.026],
+          [-0.08, 0.038],
+          [0.1, 0.058],
+          [0.2, 0.022],
+          [0.22, -0.016],
+          [0.19, -0.058],
+          [0.1, -0.054],
+          [0.02, -0.03],
+          [-0.4, -0.024],
+        ],
+        0.048
+      ),
+      m.wood
+    );
+    this._add(
+      lathe([
+        [0.0, 0.2],
+        [0.036, 0.2],
+        [0.038, 0.42],
+        [0.042, 0.62],
+        [0.05, 0.74],
+        [0.056, 0.8],
+        [0.034, 0.82],
+        [0.0, 0.814],
+      ]),
+      m.iron
+    );
+    this._add(new THREE.CylinderGeometry(0.044, 0.048, 0.22, 12), m.leather, [0, 0.0, -0.42], [Math.PI / 2, 0, 0]);
+    for (const z of [-0.34, -0.42, -0.5]) {
+      this._add(new THREE.TorusGeometry(0.048, 0.006, 6, 12), m.cord, [0, 0.0, z], [Math.PI / 2, 0, 0]);
+    }
+    this._add(new THREE.TorusGeometry(0.052, 0.01, 6, 14), m.brass, [0, 0.0, -0.8], [Math.PI / 2, 0, 0]);
+    for (let i = 0; i < 5; i++) {
+      this._add(roundedBlock(0.032, 0.012, 0.01, 0.003), m.blued, [0.04, 0.0, -0.28 - i * 0.08]);
+      this._add(roundedBlock(0.032, 0.012, 0.01, 0.003), m.blued, [-0.04, 0.0, -0.28 - i * 0.08]);
+    }
+    const glow = new THREE.Mesh(
+      new THREE.TorusGeometry(0.036, 0.007, 6, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0xff6a1a,
+        emissive: 0xff4a10,
+        emissiveIntensity: 1.4,
+        metalness: 0.2,
+        roughness: 0.4,
+      })
+    );
+    glow.rotation.x = Math.PI / 2;
+    glow.position.set(0, 0.0, -0.81);
+    this.group.add(glow);
+    this.trigger = this._add(roundedBlock(0.012, 0.036, 0.01, 0.004), m.steel, TRIGGER, [0, 0, 0.2]);
+    this._add(
+      new THREE.TorusGeometry(0.03, 0.005, 6, 14, Math.PI * 1.1),
+      m.blued,
+      [0, TRIGGER[1], TRIGGER[2]],
+      [0, Math.PI / 2, -0.4]
+    );
+    this.rearSight = this._add(new THREE.TorusGeometry(0.014, 0.003, 6, 12), m.blued, [0, 0.086, -0.04]);
+    // Spear rides high enough that looking down the tube still shows a
+    // barbed head, not just a circle of iron.
+    this.bolt = new THREE.Group();
+    this.bolt.position.set(0, 0.062, 0);
+    this.group.add(this.bolt);
+    this._add(new THREE.CylinderGeometry(0.014, 0.012, 0.78, 7), m.steel, [0, 0, -0.52], [Math.PI / 2, 0, 0], this.bolt);
+    this._add(new THREE.ConeGeometry(0.026, 0.12, 5), m.steel, [0, 0, -0.94], [Math.PI / 2, 0, 0], this.bolt);
+    for (const side of [-1, 1]) {
+      this._add(roundedBlock(0.05, 0.004, 0.022, 0.002), m.steel, [side * 0.02, 0, -0.88], [0, 0, side * 0.35], this.bolt);
+    }
+    this._add(new THREE.CylinderGeometry(0.018, 0.016, 0.03, 8), m.leather, [0, 0, -0.16], [Math.PI / 2, 0, 0], this.bolt);
+    this.muzzleLocal = [0, 0.0, -0.82];
+    this.grip = this._grip(GRIP, 0.024, 0.13, GRIP_RAKE);
+    this.foregrip = this._grip(FOREGRIP, 0.021, 0.11, -0.08);
+    this._buildArms();
   }
 
   // ------------------------------------------------------------------- firing
@@ -985,7 +1461,8 @@ export class Weapon {
    * world is the hunter's camera applied to it.
    */
   muzzleWorld(out) {
-    this._muzzle.set(0, CHANNEL_Y, MUZZLE_Z);
+    const p = this.muzzleLocal ?? [0, CHANNEL_Y, MUZZLE_Z];
+    this._muzzle.set(p[0], p[1], p[2]);
     this.group.localToWorld(this._muzzle);
     return this.viewmodel.toWorld(this._muzzle, out);
   }
@@ -999,9 +1476,9 @@ export class Weapon {
       return false;
     }
     this.bolts -= 1;
-    this.cooldown = CONFIG.weapon.cooldown;
+    this.cooldown = this.cooldownTime;
     // A heavier weapon is thrown less by the same shot, and settles slower.
-    this.recoil = CONFIG.weapon.recoil * (4.6 / CONFIG.weapon.mass);
+    this.recoil = this.recoilKick * (4.6 / this.mass);
     this.kick = 1;
     this.draw = 0;
     this.bolt.visible = false;
@@ -1011,7 +1488,7 @@ export class Weapon {
 
   tryReload() {
     if (this.reloading || this.bolts === this.max) return false;
-    this.reloadT = CONFIG.weapon.reload;
+    this.reloadT = this.reloadTime;
     return true;
   }
 
@@ -1024,12 +1501,13 @@ export class Weapon {
    * which is why the quiver refilling felt like a page reloading.
    */
   _reloadPose(dt) {
-    const t = 1 - this.reloadT / CONFIG.weapon.reload;
+    const t = 1 - this.reloadT / this.reloadTime;
     const off = THREE.MathUtils.smoothstep(t, 0, 0.18) - THREE.MathUtils.smoothstep(t, 0.82, 1);
 
+    const winds = this.spec.kind === "ballista" || this.spec.kind === "repeater";
     const wind = THREE.MathUtils.smoothstep(t, 0.2, 0.68);
-    this.draw = wind;
-    if (wind > 0 && wind < 1) this.crankSpin += dt * 15;
+    this.draw = winds ? wind : THREE.MathUtils.smoothstep(t, 0.35, 0.82);
+    if (winds && wind > 0 && wind < 1) this.crankSpin += dt * 15;
 
     // The bolt is seated once the string is latched, not at the very end.
     const seat = THREE.MathUtils.smoothstep(t, 0.7, 0.86);
@@ -1073,7 +1551,7 @@ export class Weapon {
         this.bolt.position.set(0, CHANNEL_Y, 0);
       }
       this._poseString();
-      this.crank.rotation.x = this.crankSpin;
+      if (this.crank) this.crank.rotation.x = this.crankSpin;
       return;
     }
 
@@ -1096,7 +1574,7 @@ export class Weapon {
     } else {
       this._swayTarget.set(0, 0);
     }
-    const settle = 6.5 * (4.6 / CONFIG.weapon.mass);
+    const settle = 6.5 * (4.6 / this.mass);
     this._sway.x = THREE.MathUtils.damp(this._sway.x, this._swayTarget.x, settle, dt);
     this._sway.y = THREE.MathUtils.damp(this._sway.y, this._swayTarget.y, settle, dt);
 
@@ -1133,7 +1611,7 @@ export class Weapon {
     );
 
     this._poseString();
-    this.crank.rotation.x = this.crankSpin;
+    if (this.crank) this.crank.rotation.x = this.crankSpin;
   }
 
   /**
@@ -1142,16 +1620,18 @@ export class Weapon {
    * of thing that looks wrong before anyone can say why.
    */
   _poseString() {
-    const z = THREE.MathUtils.lerp(STRING_REST_Z, STRING_LATCH_Z, this.draw);
-    this.serving.position.z = z;
+    if (!this.stringSides?.length) return;
+    const z = THREE.MathUtils.lerp(this.stringRestZ ?? STRING_REST_Z, this.stringLatchZ ?? STRING_LATCH_Z, this.draw);
+    const y = this.stringY ?? LIMB_TIP[1];
+    if (this.serving) this.serving.position.z = z;
     for (const { pivot, mesh } of this.stringSides) {
-      _dir.set(-pivot.position.x, LIMB_TIP[1] - pivot.position.y, z - pivot.position.z);
+      _dir.set(-pivot.position.x, y - pivot.position.y, z - pivot.position.z);
       const len = _dir.length();
       pivot.quaternion.setFromUnitVectors(FORWARD, _dir.divideScalar(len));
       mesh.scale.z = len;
     }
     // The limbs draw in as the string comes onto the latch.
-    for (const limb of this.limbs) limb.scale.z = 1 - this.draw * 0.03;
+    for (const limb of this.limbs ?? []) limb.scale.z = 1 - this.draw * 0.03;
   }
 
   dispose() {
