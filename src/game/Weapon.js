@@ -316,10 +316,10 @@ export class Weapon {
       glove: standardFrom(pack("leather_glove", 1.6, 1.6), {
         // Lifted so a finger is a finger in the hunter's own shadow. At
         // 0x372c24 the gloves were the same value as the stock and vanished.
-        color: 0x7a6452,
+        color: 0x8a7060,
         metalness: 0,
-        roughness: 0.76,
-        envMapIntensity: 0.32,
+        roughness: 0.74,
+        envMapIntensity: 0.36,
       }),
       // Darker leather for palm pads and fingertip caps, so a digit has a
       // face rather than reading as one continuous worm of the same value.
@@ -386,17 +386,15 @@ export class Weapon {
       null,
       pivot
     );
-    // Cord wraps. A plain leather cylinder is a bottle; three rings say
-    // someone bound this handle on purpose.
-    for (const t of [-0.18, 0.02, 0.22]) {
-      this._add(
-        new THREE.TorusGeometry(radius * 1.16, 0.003, 5, 10),
-        m.cord,
-        [0, -length * 0.05 + t * length, 0],
-        [Math.PI / 2, 0, 0],
-        pivot
-      );
-    }
+    // One dark leather band. Light cord rings read as a spring under the
+    // viewmodel key and stole the eye from the hand.
+    this._add(
+      new THREE.TorusGeometry(radius * 1.14, 0.004, 5, 10),
+      m.leather,
+      [0, -length * 0.08, 0],
+      [Math.PI / 2, 0, 0],
+      pivot
+    );
     return pivot;
   }
 
@@ -975,49 +973,49 @@ export class Weapon {
   _hand(gripR, side, skipIndex = false) {
     const m = this.mats;
     const g = new THREE.Group();
-    const rF = 0.0088;
+    const rF = 0.0105;
     const arcR = gripR + rF + 0.004;
-    const palmX = side * (gripR + 0.022);
+    const palmX = side * (gripR + 0.028);
     const ROOT = 1.92;
     const around = (phi, z, r = arcR) => [Math.sin(phi) * r * side, Math.cos(phi) * r, z];
     const KNUCKLE_Z = 0.03;
 
-    // Palm sits *outside* the handle as one tapered mass, not three boxes
-    // stacked into a slab. The first rebuild buried it inside the grip
-    // (x < gripR), so all that showed of a hand was a row of joint spheres
-    // stuck to a leather cylinder.
+    // Back of the hand stands off the handle. Fingers glued to the cylinder
+    // at constant radius were indistinguishable from the grip they held.
+    const back = new THREE.Mesh(roundedBlock(0.052, 0.078, 0.032, 0.014), m.glove);
+    back.position.set(palmX, 0.002, KNUCKLE_Z - 0.03);
+    g.add(back);
     g.add(
       new THREE.Mesh(
         sweep(
           [
-            [palmX * 0.9, -0.006, KNUCKLE_Z - 0.09],
-            [palmX, -0.002, KNUCKLE_Z - 0.056],
-            [palmX * 1.04, 0.004, KNUCKLE_Z - 0.02],
-            [palmX * 0.96, 0.01, KNUCKLE_Z + 0.006],
+            [palmX * 0.88, -0.008, KNUCKLE_Z - 0.092],
+            [palmX, -0.002, KNUCKLE_Z - 0.055],
+            [palmX * 1.06, 0.006, KNUCKLE_Z - 0.016],
+            [palmX * 0.98, 0.012, KNUCKLE_Z + 0.01],
           ],
           {
             steps: 12,
             radial: 10,
-            radius: (t) => 0.015 + t * 0.009,
-            flatten: 0.58,
+            radius: (t) => 0.017 + t * 0.01,
+            flatten: 0.55,
           }
         ),
         m.glove
       )
     );
 
-    const thenar = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), m.glove);
-    thenar.position.set(palmX * 0.82, 0.024, KNUCKLE_Z - 0.006);
-    thenar.scale.set(1.3, 1.6, 1.25);
+    const thenar = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), m.glove);
+    thenar.position.set(palmX * 0.78, 0.03, KNUCKLE_Z - 0.002);
+    thenar.scale.set(1.35, 1.7, 1.3);
     g.add(thenar);
-    const hypo = new THREE.Mesh(new THREE.SphereGeometry(0.013, 8, 6), m.glove);
-    hypo.position.set(palmX * 0.78, -0.02, KNUCKLE_Z - 0.074);
-    hypo.scale.set(1.25, 0.95, 1.4);
+    const hypo = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), m.glove);
+    hypo.position.set(palmX * 0.75, -0.022, KNUCKLE_Z - 0.074);
+    hypo.scale.set(1.3, 1.0, 1.45);
     g.add(hypo);
-    // Contact pad on the handle-facing side so the palm has a face from 3/4.
-    const contact = new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 8), m.gloveDark);
-    contact.position.set(palmX * 0.48, 0.002, KNUCKLE_Z - 0.036);
-    contact.scale.set(0.65, 1.45, 1.7);
+    const contact = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), m.gloveDark);
+    contact.position.set(palmX * 0.42, 0.004, KNUCKLE_Z - 0.034);
+    contact.scale.set(0.7, 1.5, 1.75);
     g.add(contact);
 
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.023, 0.036, 8), m.glove);
@@ -1033,18 +1031,20 @@ export class Weapon {
     g.userData.wrist = wrist;
 
     const rows = [
-      { z: KNUCKLE_Z, curl: 2.15, r: 0.0086, phi: 0 },
-      { z: KNUCKLE_Z - 0.021, curl: 2.32, r: 0.009, phi: 0.04 },
-      { z: KNUCKLE_Z - 0.042, curl: 2.42, r: 0.0084, phi: 0.08 },
-      { z: KNUCKLE_Z - 0.061, curl: 2.5, r: 0.0076, phi: 0.12 },
+      { z: KNUCKLE_Z, curl: 2.05, r: 0.0104, phi: 0 },
+      { z: KNUCKLE_Z - 0.022, curl: 2.2, r: 0.0108, phi: 0.03 },
+      { z: KNUCKLE_Z - 0.044, curl: 2.32, r: 0.01, phi: 0.07 },
+      { z: KNUCKLE_Z - 0.064, curl: 2.42, r: 0.009, phi: 0.11 },
     ];
+    const knuckleR = arcR + 0.018;
 
-    // Connected knuckle bar across the back of the hand.
+    // Connected knuckle bar across the back of the hand, stood off so it
+    // reads as a row of joints rather than paint on the handle.
     g.add(
       new THREE.Mesh(
         sweep(
-          rows.map((row) => around(ROOT + row.phi - 0.06, row.z, arcR + 0.002)),
-          { steps: 10, radial: 7, radius: () => 0.0074, flatten: 0.72 }
+          rows.map((row) => around(ROOT + row.phi - 0.05, row.z, knuckleR)),
+          { steps: 10, radial: 7, radius: () => 0.009, flatten: 0.7 }
         ),
         m.glove
       )
@@ -1052,11 +1052,11 @@ export class Weapon {
 
     let joints = 0;
     rows.forEach((row, i) => {
-      const mcp = new THREE.Mesh(new THREE.SphereGeometry(row.r * 0.92, 7, 5), m.glove);
-      mcp.position.set(...around(ROOT + row.phi - 0.08, row.z));
+      const mcp = new THREE.Mesh(new THREE.SphereGeometry(row.r * 1.05, 8, 6), m.glove);
+      mcp.position.set(...around(ROOT + row.phi - 0.06, row.z, knuckleR));
       g.add(mcp);
-      const plate = new THREE.Mesh(roundedBlock(0.012, 0.004, 0.01, 0.002), m.iron);
-      plate.position.set(...around(ROOT + row.phi - 0.08, row.z, arcR + 0.006));
+      const plate = new THREE.Mesh(roundedBlock(0.016, 0.005, 0.012, 0.002), m.iron);
+      plate.position.set(...around(ROOT + row.phi - 0.06, row.z, knuckleR + 0.007));
       g.add(plate);
       joints += 1;
       if (i === 0 && skipIndex) return;
@@ -1070,30 +1070,30 @@ export class Weapon {
         arcR,
       });
       if (i < rows.length - 1) {
-        const a = around(ROOT + row.phi - 0.02, row.z);
-        const b = around(ROOT + rows[i + 1].phi - 0.02, rows[i + 1].z);
-        const mid = [(a[0] + b[0]) / 2, ((a[1] + b[1]) / 2) * 0.9, (a[2] + b[2]) / 2];
+        const a = around(ROOT + row.phi - 0.02, row.z, knuckleR);
+        const b = around(ROOT + rows[i + 1].phi - 0.02, rows[i + 1].z, knuckleR);
+        const mid = [(a[0] + b[0]) / 2, ((a[1] + b[1]) / 2) * 0.88, (a[2] + b[2]) / 2];
         g.add(
           new THREE.Mesh(
-            sweep([a, mid, b], { steps: 6, radial: 6, radius: () => 0.0042, flatten: 0.45 }),
+            sweep([a, mid, b], { steps: 6, radial: 6, radius: () => 0.005, flatten: 0.4 }),
             m.glove
           )
         );
       }
     });
 
-    // Thumb: three bones off the thenar, laid down the front of the handle
-    // so it opposes the fingers from the camera's side of the grip.
-    const t0 = [palmX * 0.72, 0.022, KNUCKLE_Z + 0.014];
-    const t1 = [palmX * 0.22, arcR * 0.98, KNUCKLE_Z + 0.016];
-    const t2 = [-side * gripR * 0.12, arcR * 1.1, KNUCKLE_Z + 0.002];
-    const t3 = [-side * gripR * 0.72, arcR * 0.64, KNUCKLE_Z - 0.018];
+    // Thumb: three bones off the thenar, stood out on the muzzle face so
+    // it opposes the fingers instead of hiding inside the handle.
+    const t0 = [palmX * 0.7, 0.032, KNUCKLE_Z + 0.016];
+    const t1 = [palmX * 0.18, arcR * 1.22, KNUCKLE_Z + 0.022];
+    const t2 = [-side * gripR * 0.2, arcR * 1.12, KNUCKLE_Z + 0.006];
+    const t3 = [-side * gripR * 0.75, arcR * 0.7, KNUCKLE_Z - 0.014];
     g.add(
       new THREE.Mesh(
         sweep([t0, t1, t2, t3], {
           steps: 12,
           radial: 8,
-          radius: (t) => this._digitRadius(0.0092, t),
+          radius: (t) => this._digitRadius(0.011, t),
         }),
         m.glove
       )
@@ -1132,15 +1132,21 @@ export class Weapon {
    * One finger wrapping the grip as a single leather sweep.
    */
   _digit(parent, { z, startPhi, curl, radius, bones, side, arcR }) {
-    const around = (phi, zz) => [Math.sin(phi) * arcR * side, Math.cos(phi) * arcR, zz];
+    // Knuckles stand off the handle; the tip closes on it. A constant
+    // radius glued the finger to the cylinder and it read as the wrap.
+    const at = (t) => {
+      const r = arcR + 0.018 * (1 - t) * (1 - t);
+      const phi = startPhi - curl * t;
+      return [Math.sin(phi) * r * side, Math.cos(phi) * r, z - 0.0025 * t * bones];
+    };
     const pts = [];
     let joints = 0;
     for (let i = 0; i <= bones; i++) {
       const t = i / bones;
-      const p = around(startPhi - curl * t, z - 0.002 * i);
+      const p = at(t);
       pts.push(p);
       if (i > 0 && i < bones) {
-        const joint = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.82, 7, 5), this.mats.glove);
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.78, 7, 5), this.mats.glove);
         joint.position.set(...p);
         parent.add(joint);
         joints += 1;
@@ -1156,9 +1162,9 @@ export class Weapon {
         this.mats.glove
       )
     );
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.74, 8, 6), this.mats.gloveDark);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.78, 8, 6), this.mats.gloveDark);
     tip.position.set(...pts[pts.length - 1]);
-    tip.scale.set(0.82, 1.18, 0.88);
+    tip.scale.set(0.8, 1.22, 0.9);
     parent.add(tip);
     return joints;
   }
