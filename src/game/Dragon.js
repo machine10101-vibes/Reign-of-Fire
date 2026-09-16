@@ -104,19 +104,20 @@ function sweep(points, { steps = 16, radial = 8, radius, flatten = 1, caps = tru
  * does. Rows used to be five, which was enough to bow the surface and not
  * enough to read the bays as anything but a wavy line.
  */
-function membraneGeometry(span, { slack = 0.34, cols = 28, rows = 8 } = {}) {
+function membraneGeometry(span, { slack = 0.34, cols = 28, rows = 8, tatter = 0, point = 0, scallop = 1 } = {}) {
   const s = span;
+  const tip = 4.4 + point * 0.55;
   const lead = new THREE.Path();
   lead.moveTo(0, 0);
-  lead.quadraticCurveTo(1.55 * s, 0.62, 3.05 * s, 0.4);
-  lead.quadraticCurveTo(3.95 * s, 0.24, 4.4 * s, -0.2);
+  lead.quadraticCurveTo(1.55 * s, 0.62 + point * 0.12, 3.05 * s, 0.4 + point * 0.08);
+  lead.quadraticCurveTo(3.95 * s, 0.24, tip * s, -0.2 - point * 0.18);
 
   const trail = new THREE.Path();
   trail.moveTo(0, 0);
-  trail.quadraticCurveTo(0.22 * s, -0.55, 0.55 * s, -1.08);
-  trail.quadraticCurveTo(1.1 * s, -0.92, 1.6 * s, -1.38);
-  trail.quadraticCurveTo(2.15 * s, -0.86, 2.75 * s, -1.28);
-  trail.quadraticCurveTo(3.55 * s, -0.84, 4.4 * s, -0.2);
+  trail.quadraticCurveTo(0.22 * s, -0.55, 0.55 * s, -1.08 * (1 - tatter * 0.15));
+  trail.quadraticCurveTo(1.1 * s, -0.92, 1.6 * s, -1.38 * (1 - tatter * 0.25));
+  trail.quadraticCurveTo(2.15 * s, -0.86 - tatter * 0.2, 2.75 * s, -1.28 * (1 - tatter * 0.1));
+  trail.quadraticCurveTo(3.55 * s, -0.84, tip * s, -0.2 - point * 0.18);
 
   const position = [];
   const uv = [];
@@ -134,8 +135,9 @@ function membraneGeometry(span, { slack = 0.34, cols = 28, rows = 8 } = {}) {
       const along = Math.sin(Math.min(1, u * 1.25) * Math.PI) ** 0.55;
       // A shallow secondary ripple in the bays, so the sail is not one smooth
       // hammock. Amplitude is a fraction of the camber or it reads as a flag.
-      const bay = Math.sin(u * Math.PI * 4) * Math.sin(v * Math.PI) * 0.08;
-      position.push(x, y, -(slack * chord * across * along + bay * chord));
+      const bay = Math.sin(u * Math.PI * 4) * Math.sin(v * Math.PI) * 0.08 * scallop;
+      const tear = tatter > 0 && v > 0.72 ? Math.sin(u * 17.0) * Math.sin(u * 9.0) * tatter * 0.22 : 0;
+      position.push(x, y - tear * chord, -(slack * chord * across * along + bay * chord));
       uv.push(u, v);
       if (i < cols && j < rows) {
         const a = i * (rows + 1) + j;
@@ -160,9 +162,9 @@ function membraneGeometry(span, { slack = 0.34, cols = 28, rows = 8 } = {}) {
   return geo;
 }
 
-function skullGeometry(segments) {
-  return latheAlongX(
-    [
+function skullGeometry(segments, snout = "wedge") {
+  const profiles = {
+    wedge: [
       [-0.22, 0.1],
       [-0.08, 0.3],
       [0.08, 0.4],
@@ -174,8 +176,62 @@ function skullGeometry(segments) {
       [1.28, 0.04],
       [1.34, 0.0],
     ],
-    segments
-  );
+    hook: [
+      [-0.2, 0.1],
+      [-0.06, 0.28],
+      [0.14, 0.38],
+      [0.38, 0.34],
+      [0.62, 0.22],
+      [0.86, 0.13],
+      [1.08, 0.08],
+      [1.24, 0.045],
+      [1.36, 0.0],
+    ],
+    sack: [
+      [-0.24, 0.14],
+      [-0.06, 0.38],
+      [0.16, 0.5],
+      [0.4, 0.48],
+      [0.62, 0.36],
+      [0.82, 0.24],
+      [0.98, 0.16],
+      [1.12, 0.08],
+      [1.22, 0.0],
+    ],
+    disc: [
+      [-0.28, 0.16],
+      [-0.1, 0.4],
+      [0.08, 0.5],
+      [0.3, 0.46],
+      [0.52, 0.3],
+      [0.78, 0.18],
+      [1.02, 0.1],
+      [1.2, 0.05],
+      [1.3, 0.0],
+    ],
+    short: [
+      [-0.18, 0.12],
+      [-0.04, 0.32],
+      [0.14, 0.4],
+      [0.34, 0.36],
+      [0.54, 0.24],
+      [0.74, 0.14],
+      [0.9, 0.07],
+      [1.02, 0.0],
+    ],
+    ram: [
+      [-0.26, 0.16],
+      [-0.08, 0.4],
+      [0.14, 0.5],
+      [0.38, 0.48],
+      [0.58, 0.38],
+      [0.76, 0.26],
+      [0.92, 0.16],
+      [1.06, 0.08],
+      [1.16, 0.0],
+    ],
+  };
+  return latheAlongX(profiles[snout] ?? profiles.wedge, segments);
 }
 
 function jawGeometry(segments) {
@@ -231,6 +287,9 @@ export class Dragon {
       normalScale: new THREE.Vector2(2.2, 2.2),
       envMapIntensity: 0.65,
     });
+    const hide = this.spec.build.hide ?? "plates";
+    const plateFreq = hide === "columnar" ? 7.0 : hide === "smooth" ? 22.0 : hide === "pits" ? 9.0 : 14.0;
+    const plateAmp = hide === "columnar" ? 0.014 : hide === "smooth" ? 0.003 : hide === "ribs" ? 0.01 : 0.007;
     body.onBeforeCompile = (shader) => {
       shader.vertexShader = `varying vec3 vHide;\n${shader.vertexShader}`
         .replace(
@@ -241,8 +300,8 @@ export class Dragon {
            // a normal map alone cannot break a silhouette that clean; a few
            // millimetres of overlapping scale is what stops the torso reading
            // as a glazed vase from below.
-           float plate = sin(position.x * 14.0 + position.z * 3.0) * sin(position.y * 11.0 + position.z * 7.0);
-           transformed += objectNormal * plate * 0.007;`
+           float plate = sin(position.x * ${plateFreq.toFixed(1)} + position.z * 3.0) * sin(position.y * 11.0 + position.z * 7.0);
+           transformed += objectNormal * plate * ${plateAmp.toFixed(3)};`
         );
       // The scale packs outline every single plate in molten grout. Left at
       // full strength that net out-radiates the hide and the beast reads as a
@@ -266,7 +325,7 @@ export class Dragon {
       emissiveIntensity: look.emissiveBase * 0.3,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.94,
+      opacity: (this.spec.build.wingStyle ?? "sail") === "tattered" ? 0.8 : (this.spec.build.wingStyle ?? "sail") === "stone" ? 0.98 : 0.94,
     });
 
     wing.onBeforeCompile = (shader) => {
@@ -306,8 +365,22 @@ export class Dragon {
       metalness: 0.3,
       roughness: 0.35,
     });
+    const hornPack = setRepeat(textures.pack("bone", { clone: true }), 1.6, 1.2);
+    const horn = standardFrom(hornPack, {
+      color: hide === "columnar" ? 0x6a5a4a : hide === "smooth" ? 0xd8c8b0 : 0xc4b49a,
+      metalness: 0.08,
+      roughness: 0.55,
+      envMapIntensity: 0.4,
+    });
+    const maw = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(look.glow),
+      emissive: new THREE.Color(look.glow),
+      emissiveIntensity: 1.6,
+      metalness: 0.05,
+      roughness: 0.7,
+    });
 
-    this.materials = { body, wing, claw };
+    this.materials = { body, wing, claw, horn, maw };
     return this.materials;
   }
 
@@ -347,32 +420,81 @@ export class Dragon {
   }
 
   /**
-   * Belly scutes, a dorsal keel, and — where the spec asks for them — the
-   * spikes and the heavy plates. A smooth lathe from below is a balloon; these
-   * are what break that outline into something that casts a dragon-shaped
-   * shadow on the ridge.
+   * Belly scutes, a dorsal keel, and the hide the species actually wears.
+   * A smooth lathe from below is a balloon; these break that outline into
+   * something that casts a dragon-shaped shadow on the ridge.
    */
   _buildKeel(chest, body, build, girth) {
-    for (let i = 0; i < 7; i++) {
-      const t = i / 6;
-      const plate = limbMesh(new THREE.BoxGeometry(0.38, 0.07, (0.72 - t * 0.22) * girth), body);
-      plate.position.set(0.85 - t * 2.15, -0.7 * girth, 0);
-      plate.rotation.z = 0.18;
-      chest.add(plate);
+    const hide = build.hide ?? "plates";
+    const scuteCount = hide === "smooth" ? 4 : hide === "ribs" ? 5 : 7;
+
+    if (hide !== "smooth") {
+      for (let i = 0; i < scuteCount; i++) {
+        const t = i / Math.max(1, scuteCount - 1);
+        const plate = limbMesh(new THREE.BoxGeometry(0.38, 0.07, (0.72 - t * 0.22) * girth), body);
+        plate.position.set(0.85 - t * 2.15, -0.7 * girth, 0);
+        plate.rotation.z = 0.18;
+        chest.add(plate);
+      }
     }
 
-    for (let i = 0; i < 8; i++) {
-      const t = i / 7;
-      const scute = limbMesh(new THREE.BoxGeometry(0.26, 0.055, 0.2 * girth), body);
-      scute.position.set(0.95 - t * 2.55, (0.82 - t * 0.18) * girth, 0);
-      scute.rotation.z = -0.35;
-      chest.add(scute);
+    if (hide === "plates" || hide === "columnar") {
+      for (let i = 0; i < 8; i++) {
+        const t = i / 7;
+        const scute = limbMesh(new THREE.BoxGeometry(0.26, 0.055, 0.2 * girth), body);
+        scute.position.set(0.95 - t * 2.55, (0.82 - t * 0.18) * girth, 0);
+        scute.rotation.z = -0.35;
+        chest.add(scute);
+      }
+    }
+
+    if (hide === "ribs") {
+      for (let i = 0; i < 6; i++) {
+        const t = i / 5;
+        for (const side of [-1, 1]) {
+          const rib = limbMesh(
+            sweep(
+              [
+                [0.7 - t * 1.8, -0.15 * girth, 0.08 * side],
+                [0.55 - t * 1.8, -0.55 * girth, 0.38 * side],
+                [0.4 - t * 1.8, -0.72 * girth, 0.12 * side],
+              ],
+              { steps: 8, radial: 5, radius: () => 0.035, flatten: 0.55 }
+            ),
+            body
+          );
+          chest.add(rib);
+        }
+      }
+    }
+
+    if (hide === "pits") {
+      for (let i = 0; i < 10; i++) {
+        const crater = limbMesh(new THREE.SphereGeometry(0.08 + (i % 3) * 0.02, 7, 5), body);
+        crater.scale.set(1.2, 0.35, 1.1);
+        crater.position.set(0.7 - (i % 5) * 0.45, (i % 2 === 0 ? 0.15 : -0.25) * girth, ((i % 2) * 2 - 1) * 0.42 * girth);
+        chest.add(crater);
+      }
+    }
+
+    if (hide === "columnar") {
+      for (let i = 0; i < 8; i++) {
+        const t = i / 7;
+        for (const side of [-1, 1]) {
+          const col = limbMesh(new THREE.CylinderGeometry(0.12, 0.14, 0.42, 6), body);
+          col.position.set(0.55 - t * 1.9, 0.12 * girth, (0.55 + (i % 2) * 0.12) * side * girth);
+          col.rotation.z = 0.55 * side;
+          col.rotation.x = 0.2 * side;
+          chest.add(col);
+        }
+      }
     }
 
     if (build.spikes) {
-      for (let i = 0; i < 7; i++) {
-        const t = i / 6;
-        const height = 0.2 + Math.sin(t * Math.PI) * 0.34;
+      const n = hide === "columnar" ? 5 : 7;
+      for (let i = 0; i < n; i++) {
+        const t = i / Math.max(1, n - 1);
+        const height = 0.2 + Math.sin(t * Math.PI) * (hide === "columnar" ? 0.22 : 0.34);
         const spike = limbMesh(
           sweep(
             [
@@ -386,6 +508,27 @@ export class Dragon {
         );
         spike.position.set(0.9 - t * 2.5, (0.88 - t * 0.15) * girth, 0);
         chest.add(spike);
+      }
+    }
+
+    if (build.crest === "crown" || build.mane) {
+      for (let i = 0; i < 5; i++) {
+        const t = i / 4;
+        const plate = limbMesh(new THREE.BoxGeometry(0.22, 0.08, 0.34 * girth), body);
+        plate.position.set(0.55 - t * 0.7, (0.7 + t * 0.08) * girth, 0);
+        plate.rotation.z = -0.4;
+        chest.add(plate);
+      }
+    }
+
+    if (build.vents) {
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const vent = limbMesh(new THREE.TorusGeometry(0.05, 0.014, 5, 8), this.materials.maw);
+          vent.position.set(0.55 - i * 0.22, -0.15 * girth, 0.48 * side * girth);
+          vent.rotation.y = Math.PI / 2;
+          chest.add(vent);
+        }
       }
     }
 
@@ -429,6 +572,14 @@ export class Dragon {
         body
       );
       g.add(seg);
+      if (build.crest === "frill") {
+        for (const side of [-1, 1]) {
+          const flap = limbMesh(new THREE.BoxGeometry(segLength * 0.45, 0.04, 0.16), body);
+          flap.position.set(segLength * 0.4, 0.02, (rTop + 0.08) * side);
+          flap.rotation.y = 0.45 * side;
+          g.add(flap);
+        }
+      }
       parent.add(g);
       this.bones.neck.push(g);
       this._addHit("neck", seg, 1.6);
@@ -443,14 +594,36 @@ export class Dragon {
     head.position.set(segLength * 0.88, 0.03, 0);
     head.scale.setScalar(build.headSize);
 
-    const skull = limbMesh(skullGeometry(detail), body);
-    skull.scale.set(1, 0.92, 0.78);
+    const snout = build.snout ?? "wedge";
+    const skull = limbMesh(skullGeometry(detail, snout), body);
+    skull.scale.set(1, snout === "disc" ? 0.72 : 0.92, snout === "sack" || snout === "disc" ? 0.95 : 0.78);
     head.add(skull);
 
-    const brow = limbMesh(new THREE.BoxGeometry(0.28, 0.1, 0.58), body);
-    brow.position.set(0.32, 0.22, 0);
+    const brow = limbMesh(new THREE.BoxGeometry(snout === "ram" ? 0.36 : 0.28, 0.1, snout === "disc" ? 0.72 : 0.58), body);
+    brow.position.set(0.32, snout === "ram" ? 0.28 : 0.22, 0);
     brow.rotation.z = -0.18;
     head.add(brow);
+
+    if (snout === "hook") {
+      const beak = limbMesh(
+        sweep(
+          [
+            [0.9, -0.02, 0],
+            [1.12, -0.1, 0],
+            [1.28, -0.22, 0],
+            [1.18, -0.08, 0],
+          ],
+          { steps: 8, radial: 6, radius: (t) => 0.055 * (1 - t * 0.55), flatten: 0.55 }
+        ),
+        this.materials.horn
+      );
+      head.add(beak);
+    }
+
+    const maw = limbMesh(latheAlongX([[0.2, 0.08], [0.55, 0.12], [0.95, 0.04]], 8), this.materials.maw);
+    maw.scale.set(1, 0.35, 0.45);
+    maw.position.set(0.22, -0.04, 0);
+    head.add(maw);
 
     for (const side of [-1, 1]) {
       const ridge = limbMesh(
@@ -509,37 +682,108 @@ export class Dragon {
    * of every species on the ridge is supposed to be carrying.
    */
   _buildHorns(head, claw, build) {
+    const style = build.hornStyle ?? "swept";
+    const mat = this.materials.horn;
     const pairs = Math.max(1, Math.round(build.horns / 2));
+
+    const pathFor = (length, side, p) => {
+      if (style === "ram") {
+        return [
+          [0, 0, 0],
+          [0.15 * length, 0.45 * length, 0.1 * side],
+          [0.55 * length, 0.7 * length, 0.22 * side],
+          [0.95 * length, 0.15 * length, 0.18 * side],
+          [0.7 * length, -0.35 * length, 0.08 * side],
+        ];
+      }
+      if (style === "antler") {
+        return [
+          [0, 0, 0],
+          [0.08 * length, 0.5 * length, 0.08 * side],
+          [0.22 * length, 1.05 * length, 0.2 * side],
+          [0.55 * length, 1.25 * length, 0.08 * side],
+          [0.85 * length, 1.05 * length, -0.06 * side],
+        ];
+      }
+      if (style === "fan") {
+        return [
+          [0, 0, 0],
+          [0.2 * length, 0.35 * length, 0.04 * side],
+          [0.55 * length, 0.7 * length, 0.08 * side],
+          [0.95 * length, 0.55 * length, 0.02 * side],
+        ];
+      }
+      if (style === "nub") {
+        return [
+          [0, 0, 0],
+          [0.08 * length, 0.35 * length, 0.04 * side],
+          [0.18 * length, 0.55 * length, 0.02 * side],
+        ];
+      }
+      return [
+        [0, 0, 0],
+        [0.12 * length, 0.4 * length, 0.06 * side],
+        [0.28 * length, 0.85 * length, 0.14 * side],
+        [0.55 * length, 1.05 * length, 0.1 * side],
+        [0.95 * length, 0.95 * length, 0.04 * side],
+      ];
+    };
+
     for (let p = 0; p < pairs; p++) {
       const back = p / Math.max(1, pairs);
       const length = build.hornLength * (1 - back * 0.32);
       for (const side of [-1, 1]) {
         const horn = limbMesh(
-          sweep(
-            [
-              [0, 0, 0],
-              [0.12 * length, 0.4 * length, 0.06 * side],
-              [0.28 * length, 0.85 * length, 0.14 * side],
-              [0.55 * length, 1.05 * length, 0.1 * side],
-              [0.95 * length, 0.95 * length, 0.04 * side],
-            ],
-            { steps: 10, radial: 6, radius: (t) => (0.07 - p * 0.012) * (1 - t * 0.72) + 0.008 }
-          ),
-          claw
+          sweep(pathFor(length, side, p), {
+            steps: 12,
+            radial: 6,
+            radius: (t) => (0.075 - p * 0.012) * (1 - t * 0.72) + 0.008,
+            flatten: style === "fan" ? 0.45 : 0.85,
+          }),
+          mat
         );
         horn.position.set(-0.02 - back * 0.24, 0.32 - back * 0.06, (0.16 + back * 0.1) * side);
         head.add(horn);
+        if (style === "antler") {
+          const tine = limbMesh(
+            sweep(
+              [
+                [0, 0, 0],
+                [0.12 * length, 0.28 * length, 0.1 * side],
+                [0.32 * length, 0.22 * length, 0.18 * side],
+              ],
+              { steps: 8, radial: 5, radius: (t) => 0.035 * (1 - t * 0.6) + 0.006 }
+            ),
+            mat
+          );
+          tine.position.set(0.06, 0.55 * length, 0.12 * side);
+          horn.add(tine);
+        }
       }
     }
 
-    // A short crest of frill behind the crown on the longer-horned beasts.
-    // Without it the back of the skull is a hemisphere and every species'
-    // head reads as the same lump from above.
-    if (build.hornLength > 0.6) {
-      for (let i = 0; i < 5; i++) {
-        const a = -0.7 + (i / 4) * 1.4;
-        const frill = limbMesh(new THREE.BoxGeometry(0.06, 0.22, 0.04), this.materials.body);
-        frill.position.set(-0.18, 0.28, Math.sin(a) * 0.18);
+    if (style === "spike") {
+      const nasal = limbMesh(
+        sweep(
+          [
+            [0, 0, 0],
+            [0.18, 0.16, 0],
+            [0.38, 0.08, 0],
+          ],
+          { steps: 8, radial: 6, radius: (t) => 0.045 * (1 - t * 0.7) + 0.008 }
+        ),
+        mat
+      );
+      nasal.position.set(0.72, 0.12, 0);
+      head.add(nasal);
+    }
+
+    if (build.crest === "frill" || build.crest === "crown" || build.hornLength > 0.6) {
+      const n = build.crest === "crown" ? 7 : 5;
+      for (let i = 0; i < n; i++) {
+        const a = -0.75 + (i / (n - 1)) * 1.5;
+        const frill = limbMesh(new THREE.BoxGeometry(0.05, build.crest === "crown" ? 0.28 : 0.22, 0.035), this.materials.body);
+        frill.position.set(-0.18, 0.28, Math.sin(a) * 0.2);
         frill.rotation.set(a * 0.35, 0, 0.55);
         head.add(frill);
       }
@@ -548,36 +792,69 @@ export class Dragon {
 
   _buildFace(head, body, build) {
     this.eyes = [];
+    const snout = build.snout ?? "wedge";
+    const eyeScale = snout === "short" && !build.spikes ? 1.35 : snout === "disc" ? 1.15 : 1;
+    const eyeSpread = snout === "disc" ? 0.3 : 0.22;
     for (const side of [-1, 1]) {
-      const socket = limbMesh(new THREE.SphereGeometry(0.09, 10, 8), body);
-      socket.scale.set(0.85, 0.7, 0.45);
-      socket.position.set(0.38, 0.12, 0.22 * side);
+      const socket = limbMesh(new THREE.SphereGeometry(0.09 * eyeScale, 10, 8), body);
+      socket.scale.set(0.85, 0.7, snout === "disc" ? 0.7 : 0.45);
+      socket.position.set(0.38, 0.12, eyeSpread * side);
       head.add(socket);
 
       const eye = new THREE.Mesh(
-        new THREE.SphereGeometry(0.068, 10, 8),
+        new THREE.SphereGeometry(0.068 * eyeScale, 10, 8),
         new THREE.MeshBasicMaterial({ color: this.spec.look.eye })
       );
-      eye.position.set(0.42, 0.12, 0.24 * side);
+      eye.position.set(0.42, 0.12, (eyeSpread + 0.02) * side);
       head.add(eye);
       this.eyes.push(eye);
 
       const pupil = new THREE.Mesh(
-        new THREE.SphereGeometry(0.028, 8, 6),
+        new THREE.SphereGeometry(0.028 * eyeScale, 8, 6),
         new THREE.MeshBasicMaterial({ color: 0x070403 })
       );
-      pupil.position.set(0.475, 0.12, 0.25 * side);
+      pupil.position.set(0.475, 0.12, (eyeSpread + 0.03) * side);
       head.add(pupil);
 
-      const nostril = limbMesh(new THREE.SphereGeometry(0.03, 6, 5), body);
+      const nostril = limbMesh(new THREE.SphereGeometry(snout === "sack" ? 0.045 : 0.03, 6, 5), body);
       nostril.scale.set(1.2, 0.6, 0.7);
-      nostril.position.set(1.08, 0.02, 0.07 * side);
+      nostril.position.set(snout === "short" ? 0.92 : 1.08, 0.02, 0.07 * side);
       head.add(nostril);
+
+      if (snout === "disc") {
+        const disc = limbMesh(new THREE.SphereGeometry(0.22, 10, 8), body);
+        disc.scale.set(0.35, 0.85, 1.15);
+        disc.position.set(0.22, 0.08, 0.28 * side);
+        head.add(disc);
+      }
+
+      if (build.jowls || snout === "sack") {
+        const sac = limbMesh(new THREE.SphereGeometry(0.16, 10, 8), body);
+        sac.scale.set(1.15, 0.85, 0.9);
+        sac.position.set(0.28, -0.16, 0.2 * side);
+        head.add(sac);
+        const glow = limbMesh(new THREE.SphereGeometry(0.07, 8, 6), this.materials.maw);
+        glow.position.set(0.32, -0.16, 0.22 * side);
+        head.add(glow);
+      }
+
+      if (snout === "disc") {
+        const whisker = limbMesh(
+          sweep(
+            [
+              [0.7, -0.02, 0.06 * side],
+              [0.95, -0.08, 0.18 * side],
+              [1.15, -0.04, 0.28 * side],
+            ],
+            { steps: 8, radial: 4, radius: (t) => 0.012 * (1 - t * 0.5) }
+          ),
+          this.materials.horn
+        );
+        head.add(whisker);
+      }
     }
 
-    // A dewlap under the jaw on the big-headed, spike-less species — the
-    // Sulfurmaw's tell, derived rather than named so the next brood gets one.
-    if (!build.spikes && build.headSize > 1.02) {
+    if (build.jowls || (!build.spikes && build.headSize > 1.02)) {
       const wattle = new THREE.Mesh(
         membraneGeometry(0.22, { slack: 0.5, cols: 8, rows: 4 }),
         this.materials.wing
@@ -612,7 +889,7 @@ export class Dragon {
       );
       seg.rotation.y = Math.PI;
       g.add(seg);
-      if (build.spikes) {
+      if (build.spikes && (build.tailStyle ?? "barbed") !== "club") {
         const spike = limbMesh(
           sweep(
             [
@@ -627,27 +904,54 @@ export class Dragon {
         spike.position.set(-0.3, r + 0.06, 0);
         g.add(spike);
       }
+      if ((build.tailStyle ?? "barbed") === "barbed") {
+        for (const side of [-1, 1]) {
+          const hook = limbMesh(new THREE.ConeGeometry(0.04, 0.18, 5), this.materials.claw);
+          hook.position.set(-0.35, 0, r * 0.7 * side);
+          hook.rotation.x = (Math.PI / 2) * side;
+          g.add(hook);
+        }
+      }
       parent.add(g);
       this.bones.tail.push(g);
       this._addHit("tail", seg, 0.7);
       parent = g;
       x = -0.92;
     }
-    const barb = limbMesh(
-      sweep(
-        [
-          [0, 0, 0],
-          [-0.28, 0.04, 0.12],
-          [-0.7, 0.02, 0],
-          [-0.28, 0.04, -0.12],
-          [0, 0, 0],
-        ],
-        { steps: 10, radial: 6, radius: (t) => 0.08 * Math.sin(t * Math.PI) + 0.012, flatten: 0.45 }
-      ),
-      this.materials.claw
-    );
-    barb.position.set(-0.85, 0, 0);
-    parent.add(barb);
+    const style = build.tailStyle ?? "barbed";
+    if (style === "club") {
+      const club = limbMesh(new THREE.SphereGeometry(0.28 * girth, 10, 8), this.materials.horn);
+      club.scale.set(1.4, 0.85, 0.9);
+      club.position.set(-0.55, 0, 0);
+      parent.add(club);
+      for (const side of [-1, 1]) {
+        const stud = limbMesh(new THREE.ConeGeometry(0.06, 0.2, 5), this.materials.claw);
+        stud.position.set(-0.55, 0.12, 0.18 * side * girth);
+        parent.add(stud);
+      }
+    } else if (style === "fin") {
+      const fin = new THREE.Mesh(membraneGeometry(0.28, { slack: 0.2, cols: 8, rows: 4 }), this.materials.wing);
+      fin.scale.set(0.7, 1.1, 1);
+      fin.rotation.x = Math.PI / 2;
+      fin.position.set(-0.55, 0.08, 0);
+      parent.add(fin);
+    } else {
+      const barb = limbMesh(
+        sweep(
+          [
+            [0, 0, 0],
+            [-0.28, 0.04, 0.12],
+            [-0.7, 0.02, 0],
+            [-0.28, 0.04, -0.12],
+            [0, 0, 0],
+          ],
+          { steps: 10, radial: 6, radius: (t) => 0.08 * Math.sin(t * Math.PI) + 0.012, flatten: 0.45 }
+        ),
+        this.materials.claw
+      );
+      barb.position.set(-0.85, 0, 0);
+      parent.add(barb);
+    }
   }
 
   /**
@@ -692,14 +996,25 @@ export class Dragon {
       elbow.add(wrist);
       wrist.add(limbMesh(new THREE.SphereGeometry(0.08, 8, 6), body));
 
-      const membrane = new THREE.Mesh(membraneGeometry(span), wing);
+      const style = build.wingStyle ?? "sail";
+      const sail = {
+        sail: { slack: 0.34, tatter: 0, point: 0, scallop: 1 },
+        tattered: { slack: 0.3, tatter: 0.85, point: 0.1, scallop: 1.35 },
+        stone: { slack: 0.16, tatter: 0, point: 0, scallop: 0.4 },
+        silent: { slack: 0.48, tatter: 0, point: 0.15, scallop: 0.7 },
+        racer: { slack: 0.22, tatter: 0, point: 0.7, scallop: 0.85 },
+      }[style] ?? { slack: 0.34, tatter: 0, point: 0, scallop: 1 };
+      const membrane = new THREE.Mesh(membraneGeometry(span, { ...sail, cols: 28, rows: 8 }), wing);
       membrane.castShadow = true;
       membrane.scale.z = side;
       membrane.position.set(-0.2, -0.08, 0.08 * side);
       elbow.add(membrane);
       this._addHit("wing", membrane, 0.55);
 
-      const innerSail = new THREE.Mesh(membraneGeometry(span * 0.42, { slack: 0.22, cols: 12, rows: 5 }), wing);
+      const innerSail = new THREE.Mesh(
+        membraneGeometry(span * 0.42, { slack: sail.slack * 0.65, cols: 12, rows: 5, tatter: sail.tatter * 0.5, point: sail.point }),
+        wing
+      );
       innerSail.castShadow = true;
       innerSail.scale.z = side;
       innerSail.position.set(-0.05, -0.02, 0.04 * side);
@@ -718,10 +1033,16 @@ export class Dragon {
         wrist.add(finger);
       }
 
-      const hook = limbMesh(new THREE.ConeGeometry(0.055, 0.38, 5), claw);
+      const hook = limbMesh(new THREE.ConeGeometry(style === "stone" ? 0.08 : 0.055, style === "racer" ? 0.48 : 0.38, 5), claw);
       hook.position.set(0.06, 0.02, 2.05 * span * side);
       hook.rotation.z = -Math.PI / 2.5;
       wrist.add(hook);
+      if (style === "sail" || style === "tattered") {
+        const spur = limbMesh(new THREE.ConeGeometry(0.04, 0.22, 5), claw);
+        spur.position.set(0.12, -0.04, 0.15 * side);
+        spur.rotation.z = Math.PI / 2;
+        wrist.add(spur);
+      }
 
       shoulder.userData.side = side;
       elbow.userData.side = side;
@@ -735,11 +1056,12 @@ export class Dragon {
   _buildLegs(chest, body, claw, girth) {
     this.bones.legs = [];
     this.bones.knees = [];
+    const bulk = THREE.MathUtils.clamp(girth, 0.55, 1.55);
     for (const [x, z, size] of [
-      [0.72, 0.42, 1.0],
-      [0.72, -0.42, 1.0],
-      [-1.25, 0.46, 1.25],
-      [-1.25, -0.46, 1.25],
+      [0.72, 0.42, 1.0 * bulk],
+      [0.72, -0.42, 1.0 * bulk],
+      [-1.25, 0.46, 1.25 * bulk],
+      [-1.25, -0.46, 1.25 * bulk],
     ]) {
       const hip = new THREE.Group();
       hip.position.set(x, -0.42 * girth, z * girth);
