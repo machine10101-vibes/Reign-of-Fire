@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reign of Fire</title>
+    <link rel="icon" href="./favicon.svg" />
+    <script type="module" crossorigin src="./assets/index-CsUBYkcV.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-LQ2Bhv-g.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="gl"></canvas>
+      <div id="title-screen">
+        <img id="title-art" src="./assets/art/visual_target_fps.webp" alt="Reign of Fire visual target" />
+        <div id="title-copy">
+          <p class="eyebrow">Vertical slice</p>
+          <h1>Reign of Fire</h1>
+          <p class="tag">Caldera Ridge &middot; seven species, one ridge</p>
+          <div id="codex"></div>
+          <button id="hunt-btn" type="button" disabled>Loading the ridge&hellip;</button>
+          <div id="loading"><i id="loading-fill"></i></div>
+          <p class="controls">
+            WASD move &middot; Mouse look &middot; LMB fire &middot; R reload &middot; B armoury at camp &middot; Shift sprint &middot; C crouch &middot; Space jump
+          </p>
+          <p class="controls sub">
+            Autoplay cinematic: add <code>?autoplay=1</code>
+          </p>
+        </div>
+      </div>
+      <div id="hud" class="hidden">
+        <div id="vignette"></div>
+        <div id="heat"></div>
+        <div id="crosshair"></div>
+        <div id="hitmarker"></div>
+        <div id="top-left">
+          <div class="meter">
+            <span>Hunter</span>
+            <div class="bar"><i id="hp-fill"></i></div>
+          </div>
+          <div class="meter">
+            <span id="weapon-name">Ashpiercer</span>
+            <div id="bolts">8 / 8</div>
+            <div id="reload"><i id="reload-fill"></i><span id="reload-label">Winding</span></div>
+          </div>
+        </div>
+        <div id="top-right">
+          <div id="fps">60 FPS</div>
+          <div id="quality">Cinematic</div>
+          <div id="bounty">0 gold</div>
+          <ul id="kill-log"></ul>
+        </div>
+        <div id="beast">
+          <div id="beast-wave">Flight 1 of 6</div>
+          <div id="beast-name">Emberkin</div>
+          <div id="beast-epithet">Carrion Scavenger</div>
+          <div class="bar beast"><i id="beast-fill"></i></div>
+          <div id="beast-mood">
+            <span id="beast-state">patrol</span>
+            <span id="beast-aggr-label">Aggression</span>
+            <div class="bar aggr"><i id="beast-aggr"></i></div>
+          </div>
+        </div>
+        <div id="threats"></div>
+        <div id="hint">The ridge is watching.</div>
+        <div id="downed" class="hidden">
+          <p id="downed-title">The ridge takes its due</p>
+          <p id="downed-line"></p>
+          <p id="downed-sub">Dragged back to the camp fire</p>
+        </div>
+        <div id="shop" class="hidden">
+          <div id="shop-panel">
+            <header id="shop-head">
+              <div>
+                <p class="eyebrow">Camp armoury</p>
+                <h2>Spend what the ridge paid</h2>
+              </div>
+              <div id="shop-gold">0 gold</div>
+              <button type="button" data-shop="close">Close</button>
+            </header>
+            <div id="shop-list"></div>
+            <p id="shop-foot">B or Escape to close. Gold is the bounty on the beasts you drop.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
